@@ -358,6 +358,28 @@ func TestAccComputeRegionBackendService_subsettingUpdate(t *testing.T) {
 }
 <% end -%>
 
+func TestAccComputeRegionBackendService_withPrivateOriginAuth(t *testing.T) {
+	t.Parallel()
+
+	randomSuffix := acctest.RandString(t, 10)
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccCheckComputeBackendServiceDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccComputeRegionBackendService_withPrivateOriginAuth(randomSuffix),
+			},
+			{
+				ResourceName:      "google_compute_region_backend_service.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 func testAccComputeRegionBackendService_ilbBasic_withUnspecifiedProtocol(serviceName, checkName string) string {
 	return fmt.Sprintf(`
 resource "google_compute_region_backend_service" "foobar" {
@@ -1148,3 +1170,41 @@ resource "google_compute_region_security_policy" "policy" {
 `, serviceName, polLink, polName)
 }
 <% end -%>
+
+func testAccComputeRegionBackendService_withPrivateOriginAuth(randomSuffix string) string {
+	return fmt.Sprintf(`
+resource "google_compute_region_backend_service" "foobar" {
+  name          = "tf-test-backend-service-%s"
+  security_settings {
+    aws_v4_authentication {
+      access_key_id = "AKIAIOSFODNN7EXAMPLE"
+      access_key = "c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9"
+      access_key_version = "prod-access-key-v1.2"
+      origin_region = "us-east-2"
+    }
+  }
+  backend {
+    group = google_compute_region_network_endpoint_group.group.self_link
+  }
+}
+
+resource "google_compute_region_network_endpoint" "networkendpoint" {
+  region_network_endpoint_group = google_compute_region_network_endpoint_group.group.name
+	region                 = "us-central1"
+  port                   = 443
+	fqdn  = "backend.example.com"
+}
+
+resource "google_compute_region_network_endpoint_group" "group" {
+  name         = "tf-test-neg-%s"
+  network      = google_compute_network.default.id
+  region                = "us-central1"
+  network_endpoint_type = "INTERNET_FQDN_PORT"
+}
+
+resource "google_compute_network" "default" {
+  name                    = "tf-test-network-%s"
+  auto_create_subnetworks = false
+}
+`, randomSuffix, randomSuffix, randomSuffix)
+}
