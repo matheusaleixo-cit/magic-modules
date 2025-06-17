@@ -202,3 +202,109 @@ resource "google_project" "accepted_producer_project2" {
 }
 `, context)
 }
+
+func TestAccComputeNetworkAttachment_stableIp(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]interface{}{
+		"billing_account": envvar.GetTestBillingAccountFromEnv(t),
+		"org_id":          envvar.GetTestOrgFromEnv(t),
+		"random_suffix":   acctest.RandString(t, 10),
+	}
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccCheckComputeNetworkAttachmentDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccComputeNetworkAttachment_stableIp(context),
+			},
+			{
+				ResourceName:            "google_compute_network_attachment.default",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"region"},
+			},
+		},
+	})
+}
+
+func testAccComputeNetworkAttachment_stableIp(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_compute_network_attachment" "default" {
+    name = "tf-test-basic-network-attachment%{random_suffix}"
+    region = "us-central1"
+    description = "basic network attachment description"
+    connection_preference = "ACCEPT_MANUAL"
+
+    subnetworks = [
+        google_compute_subnetwork.net1.self_link
+    ]
+
+    producer_accept_lists = [
+        google_project.accepted_producer_project1.project_id
+    ]
+}
+
+resource "google_compute_network" "default" {
+    name = "tf-test-basic-network%{random_suffix}"
+    auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "net1" {
+    name = "tf-test-basic-subnetwork1-%{random_suffix}"
+    region = "us-central1"
+
+    network = google_compute_network.default.id
+    ip_cidr_range = "10.0.0.0/16"
+}
+
+resource "google_project" "accepted_producer_project1" {
+    project_id      = "tf-test-prj-accept1-%{random_suffix}"
+    name            = "tf-test-prj-accept1-%{random_suffix}"
+    org_id          = "%{org_id}"
+    billing_account = "%{billing_account}"
+    deletion_policy = "DELETE"
+}
+
+resource "google_compute_address" "producer_address" {
+  project = google_project.accepted_producer_project1.project_id
+  name = "tf-test-basic-address%{random_suffix}"
+	network_attachment = google_compute_network_attachment.default.id
+}
+
+resource "google_compute_instance" "producer_instance" {
+  project = google_project.accepted_producer_project1.project_id
+  name         = "tf-test-basic-instance%{random_suffix}"
+  machine_type = "e2-medium"
+  zone         = "us-central1-a"
+  tags         = ["foo", "bar"]
+
+  boot_disk {
+    initialize_params {
+      image = data.google_compute_image.my_image.self_link
+    }
+  }
+
+  network_interface {
+    network = google_compute_network.default
+    subnetwork = google_compute_subnetwork.net1
+  }
+
+  network_interface {
+    network_attachment = google_compute_network_attachment.default.self_link
+    private_network_ip = google_compute_address.producer_address.id
+  }
+  
+  metadata = {
+    foo = "bar"
+  }
+}
+
+data "google_compute_image" "my_image" {
+  family  = "debian-11"
+  project = "debian-cloud"
+}
+`, context)
+}
