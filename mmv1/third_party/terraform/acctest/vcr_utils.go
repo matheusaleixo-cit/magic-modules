@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,6 +24,9 @@ import (
 
 	"github.com/hashicorp/terraform-provider-google/google/fwprovider"
 	tpgprovider "github.com/hashicorp/terraform-provider-google/google/provider"
+	"github.com/hashicorp/terraform-provider-google/google/services/compute"
+	"github.com/hashicorp/terraform-provider-google/google/services/pubsublite"
+	"github.com/hashicorp/terraform-provider-google/google/services/sql"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 
@@ -30,9 +34,10 @@ import (
 	"github.com/dnaeon/go-vcr/recorder"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	fwResource "github.com/hashicorp/terraform-plugin-framework/resource"
+
 	fwDiags "github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -145,7 +150,15 @@ func VcrTest(t *testing.T, c resource.TestCase) {
 	if IsVcrEnabled() {
 		defer closeRecorder(t)
 	} else if isReleaseDiffEnabled() {
-		c = initializeReleaseDiffTest(c, t.Name())
+		// creates temporary file for the individual test, will be a temporary to store the output
+		tempOutputFile, err := createTemporaryFile()
+		if err != nil {
+			t.Errorf("creating temporary file %v", err)
+		}
+		defer func() {
+			writeOutputFileDeferFunction(tempOutputFile, t.Failed())
+		}()
+		c = initializeReleaseDiffTest(c, t.Name(), tempOutputFile)
 	}
 
 	c = extendWithTGCData(t, c)
@@ -159,11 +172,25 @@ func VcrTest(t *testing.T, c resource.TestCase) {
 		if s.ImportStateVerify && !slices.Contains(s.ImportStateVerifyIgnore, "terraform_labels") {
 			s.ImportStateVerifyIgnore = append(s.ImportStateVerifyIgnore, "terraform_labels")
 		}
+		if IsVcrEnabled() && os.Getenv("VCR_MODE") == "REPLAYING" {
+			re := regexp.MustCompile(`create_duration = "\d+[sm]"`)
+			s.Config = re.ReplaceAllString(s.Config, `create_duration = "1s"`)
+		}
 		steps = append(steps, s)
 	}
 	c.Steps = steps
 
 	resource.Test(t, c)
+}
+
+func createTemporaryFile() (*os.File, error) {
+	// creates temporary file for the individual test, will be a temporary to store the output
+	tempOutputFile, err := os.CreateTemp("", "release_diff_test_output_*.log")
+	if err != nil {
+		return nil, err
+	}
+
+	return tempOutputFile, nil
 }
 
 // We need to explicitly close the VCR recorder to save the cassette
@@ -200,87 +227,6 @@ func closeRecorder(t *testing.T) {
 		delete(sources, t.Name())
 		sourcesLock.Unlock()
 	}
-}
-
-func isReleaseDiffEnabled() bool {
-	releaseDiff := os.Getenv("RELEASE_DIFF")
-	return releaseDiff != ""
-}
-
-func initializeReleaseDiffTest(c resource.TestCase, testName string) resource.TestCase {
-	var releaseProvider string
-	packagePath := fmt.Sprint(reflect.TypeOf(transport_tpg.Config{}).PkgPath())
-	if strings.Contains(packagePath, "google-beta") {
-		releaseProvider = "google-beta"
-	} else {
-		releaseProvider = "google"
-	}
-
-	if c.ExternalProviders != nil {
-		c.ExternalProviders[releaseProvider] = resource.ExternalProvider{}
-	} else {
-		c.ExternalProviders = map[string]resource.ExternalProvider{
-			releaseProvider: {},
-		}
-	}
-
-	localProviderName := "google-local"
-	if c.Providers != nil {
-		c.Providers = map[string]*schema.Provider{
-			localProviderName: GetSDKProvider(testName),
-		}
-		c.ProtoV5ProviderFactories = map[string]func() (tfprotov5.ProviderServer, error){
-			localProviderName: func() (tfprotov5.ProviderServer, error) {
-				return nil, nil
-			},
-		}
-	} else {
-		c.ProtoV5ProviderFactories = map[string]func() (tfprotov5.ProviderServer, error){
-			localProviderName: func() (tfprotov5.ProviderServer, error) {
-				provider, err := MuxedProviders(testName)
-				return provider(), err
-			},
-		}
-	}
-
-	var replacementSteps []resource.TestStep
-	for _, testStep := range c.Steps {
-		if testStep.Config != "" {
-			ogConfig := testStep.Config
-			testStep.Config = reformConfigWithProvider(ogConfig, localProviderName)
-			if testStep.ExpectError == nil && testStep.PlanOnly == false {
-				newStep := resource.TestStep{
-					Config: reformConfigWithProvider(ogConfig, releaseProvider),
-				}
-				testStep.PlanOnly = true
-				testStep.ExpectNonEmptyPlan = false
-				replacementSteps = append(replacementSteps, newStep)
-			}
-			replacementSteps = append(replacementSteps, testStep)
-		} else {
-			replacementSteps = append(replacementSteps, testStep)
-		}
-	}
-
-	c.Steps = replacementSteps
-
-	return c
-}
-
-func reformConfigWithProvider(config, provider string) string {
-	configBytes := []byte(config)
-	providerReplacement := fmt.Sprintf("provider = %s", provider)
-	providerReplacementBytes := []byte(providerReplacement)
-	providerBlock := regexp.MustCompile(`provider *=.*google-beta.*`)
-
-	if providerBlock.Match(configBytes) {
-		return string(providerBlock.ReplaceAll(configBytes, providerReplacementBytes))
-	}
-
-	providerReplacement = fmt.Sprintf("${1}\n\t%s", providerReplacement)
-	providerReplacementBytes = []byte(providerReplacement)
-	resourceHeader := regexp.MustCompile(`(resource .*google_.* .*\w+.*\{.*)`)
-	return string(resourceHeader.ReplaceAll(configBytes, providerReplacementBytes))
 }
 
 // HandleVCRConfiguration configures the recorder (github.com/dnaeon/go-vcr/recorder) used in the VCR test
@@ -324,8 +270,13 @@ func HandleVCRConfiguration(ctx context.Context, testName string, rndTripper htt
 // NewVcrMatcherFunc returns a function used for matching HTTP requests with data recorded in VCR cassettes
 func NewVcrMatcherFunc(ctx context.Context) func(r *http.Request, i cassette.Request) bool {
 	return func(r *http.Request, i cassette.Request) bool {
-		// Default matcher compares method and URL only
-		if !cassette.DefaultMatcher(r, i) {
+		// Compare method and URL, normalizing standard Google API query
+		// params (alt, prettyPrint) so that cassettes recorded via the
+		// typed client match requests made via transport_tpg.SendRequest.
+		if r.Method != i.Method {
+			return false
+		}
+		if stripStandardQueryParams(r.URL.String()) != stripStandardQueryParams(i.URL) {
 			return false
 		}
 		if r.Body == nil {
@@ -366,6 +317,22 @@ func NewVcrMatcherFunc(ctx context.Context) func(r *http.Request, i cassette.Req
 	}
 }
 
+// stripStandardQueryParams removes standard Google API query parameters
+// (alt, prettyPrint) from a URL string. This allows VCR cassettes recorded
+// via the typed API client to match requests made via transport_tpg.SendRequest,
+// which may include a different set of these decorative parameters.
+func stripStandardQueryParams(rawurl string) string {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return rawurl
+	}
+	q := u.Query()
+	q.Del("alt")
+	q.Del("prettyPrint")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // MuxedProviders configures the providers, thus, if we want the providers to be configured
 // to use VCR, the configure functions need to be altered. The only way to do this is to create
 // test versions of the provider that will call the same configure function, only append the VCR
@@ -404,7 +371,14 @@ func (p *frameworkTestProvider) Configure(ctx context.Context, req provider.Conf
 func (p *frameworkTestProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	ds := p.FrameworkProvider.DataSources(ctx)
 	ds = append(ds, fwprovider.NewGoogleProviderConfigPluginFrameworkDataSource) // google_provider_config_plugin_framework
+	ds = append(ds, compute.NewComputeNetworkFWDataSource)                       // google_fw_compute_network
 	return ds
+}
+
+func (p *frameworkTestProvider) Resources(ctx context.Context) []func() fwResource.Resource {
+	r := p.FrameworkProvider.Resources(ctx)
+	r = append(r, pubsublite.NewGooglePubsubLiteReservationFWResource, sql.NewSQLUserFWResource) // google_fwprovider_pubsub_lite_reservation
+	return r
 }
 
 // GetSDKProvider gets the SDK provider for use in acceptance tests

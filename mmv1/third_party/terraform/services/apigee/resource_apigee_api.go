@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 )
@@ -324,8 +325,8 @@ func resourceApigeeApiDelete(d *schema.ResourceData, meta interface{}) error {
 func resourceApigeeApiImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	config := meta.(*transport_tpg.Config)
 	if err := tpgresource.ParseImportId([]string{
-		"organizations/(?P<org_id>[^/]+)/apis/(?P<name>[^/]+)",
-		"(?P<org_id>[^/]+)/(?P<name>[^/]+)",
+		"^organizations/(?P<org_id>[^/]+)/apis/(?P<name>[^/]+)$",
+		"^(?P<org_id>[^/]+)/(?P<name>[^/]+)$",
 	}, d, config); err != nil {
 		return nil, err
 	}
@@ -400,4 +401,13 @@ func apigeeApiDetectBundleUpdate(_ context.Context, diff *schema.ResourceDiff, v
 		return true
 	}
 	return diff.HasChange("config_bundle") || diff.HasChange("md5hash")
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_apigee_api",
+		ProductName: "apigee",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceApigeeApi(),
+	}.Register()
 }

@@ -37,6 +37,7 @@ async:
   result:
     resource_inside_response: false
 custom_code:
+include_in_tgc_next: true
 examples:
   - name: 'compute_packet_mirroring_full'
     primary_resource_id: 'foobar'
@@ -144,6 +145,8 @@ properties:
     properties:
       - name: 'subnetworks'
         type: Array
+        is_set: true
+        set_hash_func: tpgresource.NestedUrlSetHashFunc
         description: |
           All instances in one of these subnetworks will be mirrored.
         at_least_one_of:
@@ -161,10 +164,13 @@ properties:
                 The URL of the subnetwork where this rule should be active.
               required: true
               custom_expand: 'templates/terraform/custom_expand/resourceref_with_validation.go.tmpl'
+              diff_suppress_func: 'tpgresource.CompareSelfLinkRelativePaths'
               resource: 'Subnetwork'
               imports: 'selfLink'
       - name: 'instances'
         type: Array
+        is_set: true
+        set_hash_func: tpgresource.NestedUrlSetHashFunc
         description: |
           All the listed instances will be mirrored.  Specify at most 50.
         at_least_one_of:
@@ -181,6 +187,7 @@ properties:
                 The URL of the instances where this rule should be active.
               required: true
               custom_expand: 'templates/terraform/custom_expand/resourceref_with_validation.go.tmpl'
+              diff_suppress_func: 'tpgresource.CompareSelfLinkRelativePaths'
               resource: 'Instance'
               imports: 'selfLink'
       - name: 'tags'
@@ -193,3 +200,12 @@ properties:
           - 'mirrored_resources.0.tags'
         item_type:
           type: String
+  - name: 'enable'
+    type: Enum
+    description: |
+      Indicates whether or not this packet mirroring takes effect. If set to FALSE, this packet mirroring
+      policy will not be enforced on the network. The default is TRUE.
+    default_from_api: true
+    enum_values:
+      - 'TRUE'
+      - 'FALSE'

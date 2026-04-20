@@ -22,7 +22,6 @@ resource "google_project_service" "kms_api_service" {
   provider                   = google-beta
   service                    = "cloudkms.googleapis.com"
   project                    = google_project.key_project.project_id
-  disable_on_destroy         = false
   disable_dependent_services = true
   depends_on                 = [google_project.key_project]
 }
@@ -66,6 +65,7 @@ resource "google_kms_autokey_config" "{{$.PrimaryResourceId}}" {
   provider    = google-beta
   folder      = google_folder.autokms_folder.id
   key_project = "projects/${google_project.key_project.project_id}"
+  key_project_resolution_mode = "DEDICATED_KEY_PROJECT"
   depends_on  = [time_sleep.wait_srv_acc_permissions]
 }
 

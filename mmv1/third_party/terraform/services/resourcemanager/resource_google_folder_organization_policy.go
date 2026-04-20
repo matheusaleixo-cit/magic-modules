@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -47,9 +48,9 @@ func resourceFolderOrgPolicyImporter(d *schema.ResourceData, meta interface{}) (
 	config := meta.(*transport_tpg.Config)
 
 	if err := tpgresource.ParseImportId([]string{
-		"folders/(?P<folder>[^/]+)/constraints/(?P<constraint>[^/]+)",
-		"folders/(?P<folder>[^/]+)/(?P<constraint>[^/]+)",
-		"(?P<folder>[^/]+)/(?P<constraint>[^/]+)"},
+		"^folders/(?P<folder>[^/]+)/constraints/(?P<constraint>[^/]+)$",
+		"^folders/(?P<folder>[^/]+)/(?P<constraint>[^/]+)$",
+		"^(?P<folder>[^/]+)/(?P<constraint>[^/]+)$"},
 		d, config); err != nil {
 		return nil, err
 	}
@@ -192,4 +193,13 @@ func setFolderOrganizationPolicy(d *schema.ResourceData, meta interface{}) error
 		},
 		Timeout: d.Timeout(schema.TimeoutCreate),
 	})
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_folder_organization_policy",
+		ProductName: "resourcemanager",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceGoogleFolderOrganizationPolicy(),
+	}.Register()
 }

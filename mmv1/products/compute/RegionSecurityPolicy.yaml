@@ -38,8 +38,11 @@ async:
     base_url: '{{op_id}}'
   result:
     resource_inside_response: false
+include_in_tgc_next: true
 custom_code:
   constants: 'templates/terraform/constants/region_security_policy.go.tmpl'
+# excluding identity due to name value inconsistency
+exclude_identity_generation: true
 sweeper:
   url_substitutions:
     - region: "us-south1"
@@ -132,6 +135,58 @@ properties:
           - 'ADVANCED'
           - 'ADVANCED_PREVIEW'
           - 'STANDARD'
+  - name: "advancedOptionsConfig"
+    type: NestedObject
+    description: |
+      Advanced Options Config of this security policy.
+    properties:
+      - name: "jsonParsing"
+        type: Enum
+        description: |
+          JSON body parsing. Supported values include: "DISABLED", "STANDARD", "STANDARD_WITH_GRAPHQL".
+        enum_values:
+          - "DISABLED"
+          - "STANDARD"
+          - "STANDARD_WITH_GRAPHQL"
+      - name: "jsonCustomConfig"
+        type: NestedObject
+        description: |
+          Custom configuration to apply the JSON parsing. Only applicable when JSON parsing is set to STANDARD.
+        properties:
+          - name: "contentTypes"
+            type: Array
+            description: |
+              A list of custom Content-Type header values to apply the JSON parsing.
+            item_type:
+              type: String
+            is_set: true
+            required: true
+      - name: "logLevel"
+        type: Enum
+        description: |
+          Logging level. Supported values include: "NORMAL", "VERBOSE".
+        enum_values:
+          - "NORMAL"
+          - "VERBOSE"
+      - name: "userIpRequestHeaders"
+        type: Array
+        description: |
+          An optional list of case-insensitive request header names to use for resolving the callers client IP address.
+        item_type:
+          type: String
+        is_set: true
+      - name: requestBodyInspectionSize
+        type: Enum
+        description: |
+          The maximum request size chosen by the customer with Waf enabled. Values supported are "8KB", "16KB, "32KB", "48KB" and "64KB".
+          Values are case insensitive.
+        enum_values:
+          - "8KB"
+          - "16KB"
+          - "32KB"
+          - "48KB"
+          - "64KB"
+        min_version: beta
   - name: 'selfLink'
     type: String
     description: |
@@ -415,15 +470,6 @@ properties:
           type: NestedObject
           description: |
             Must be specified if the action is "rate_based_ban" or "throttle". Cannot be specified for any other actions.
-          update_mask_fields:
-            - 'rateLimitOptions.rateLimitThreshold'
-            - 'rateLimitOptions.conformAction'
-            - 'rateLimitOptions.exceedAction'
-            - 'rateLimitOptions.enforceOnKey'
-            - 'rateLimitOptions.enforceOnKeyName'
-            - 'rateLimitOptions.enforceOnKeyConfigs'
-            - 'rateLimitOptions.banThreshold'
-            - 'rateLimitOptions.banDurationSec'
           properties:
             - name: 'rateLimitThreshold'
               type: NestedObject
@@ -461,6 +507,7 @@ properties:
                 * SNI: Server name indication in the TLS session of the HTTPS request. The key value is truncated to the first 128 bytes. The key type defaults to ALL on a HTTP session.
                 * REGION_CODE: The country/region from which the request originates.
                 * TLS_JA3_FINGERPRINT: JA3 TLS/SSL fingerprint if the client connects using HTTPS, HTTP/2 or HTTP/3. If not available, the key type defaults to ALL.
+                * TLS_JA4_FINGERPRINT: JA4 TLS/SSL fingerprint if the client connects using HTTPS, HTTP/2 or HTTP/3. If not available, the key type defaults to ALL.
                 * USER_IP: The IP address of the originating client, which is resolved based on "userIpRequestHeaders" configured with the security policy. If there is no "userIpRequestHeaders" configuration or an IP address cannot be resolved from it, the key type defaults to IP.
               enum_values:
                 - 'ALL'
@@ -472,6 +519,7 @@ properties:
                 - 'SNI'
                 - 'REGION_CODE'
                 - 'TLS_JA3_FINGERPRINT'
+                - 'TLS_JA4_FINGERPRINT'
                 - 'USER_IP'
             - name: 'enforceOnKeyName'
               type: String
@@ -501,6 +549,7 @@ properties:
                       * SNI: Server name indication in the TLS session of the HTTPS request. The key value is truncated to the first 128 bytes. The key type defaults to ALL on a HTTP session.
                       * REGION_CODE: The country/region from which the request originates.
                       * TLS_JA3_FINGERPRINT: JA3 TLS/SSL fingerprint if the client connects using HTTPS, HTTP/2 or HTTP/3. If not available, the key type defaults to ALL.
+                      * TLS_JA4_FINGERPRINT: JA4 TLS/SSL fingerprint if the client connects using HTTPS, HTTP/2 or HTTP/3. If not available, the key type defaults to ALL.
                       * USER_IP: The IP address of the originating client, which is resolved based on "userIpRequestHeaders" configured with the security policy. If there is no "userIpRequestHeaders" configuration or an IP address cannot be resolved from it, the key type defaults to IP.
                     enum_values:
                       - 'ALL'
@@ -512,6 +561,7 @@ properties:
                       - 'SNI'
                       - 'REGION_CODE'
                       - 'TLS_JA3_FINGERPRINT'
+                      - 'TLS_JA4_FINGERPRINT'
                       - 'USER_IP'
                   - name: 'enforceOnKeyName'
                     type: String
@@ -553,15 +603,6 @@ properties:
             Example:
             networkMatch: srcIpRanges: - "192.0.2.0/24" - "198.51.100.0/24" userDefinedFields: - name: "ipv4_fragment_offset" values: - "1-0x1fff"
             The above match condition matches packets with a source IP in 192.0.2.0/24 or 198.51.100.0/24 and a user-defined field named "ipv4_fragment_offset" with a value between 1 and 0x1fff inclusive
-          update_mask_fields:
-            - 'network_match.userDefinedFields'
-            - 'network_match.srcIpRanges'
-            - 'network_match.destIpRanges'
-            - 'network_match.ipProtocols'
-            - 'network_match.srcPorts'
-            - 'network_match.destPorts'
-            - 'network_match.srcRegionCodes'
-            - 'network_match.srcAsns'
           properties:
             - name: 'userDefinedFields'
               type: Array

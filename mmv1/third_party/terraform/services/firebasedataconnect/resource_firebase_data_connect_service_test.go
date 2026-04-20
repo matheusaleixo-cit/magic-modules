@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package firebasedataconnect_test
 
 import (
@@ -61,7 +58,6 @@ func testAccFirebaseDataConnectService_update(context map[string]interface{}, di
 resource "google_project_service" "fdc" {
   project = "%{project_id}"
   service = "firebasedataconnect.googleapis.com"
-  disable_on_destroy = false
 }
 
 # Create an FDC service

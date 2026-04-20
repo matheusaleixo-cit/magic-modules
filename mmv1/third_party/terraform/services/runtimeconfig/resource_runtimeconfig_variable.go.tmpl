@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 
@@ -204,7 +205,7 @@ func newRuntimeconfigVariableFromResourceData(d *schema.ResourceData, project st
 	text := d.Get("text")
 	value := d.Get("value")
 
-	// TODO(selmanj) here we assume it's a simple name, not a full name. Should probably support full name as well
+	// TODO here we assume it's a simple name, not a full name. Should probably support full name as well
 	parent = d.Get("parent").(string)
 	name := d.Get("name").(string)
 
@@ -249,5 +250,14 @@ func setRuntimeConfigVariableToResourceData(d *schema.ResourceData, variable run
 	}
 
 	return nil
+}
+
+func init() {
+	registry.Schema{
+		Name: "google_runtimeconfig_variable",
+		ProductName: "runtimeconfig",
+		Type: registry.SchemaTypeResource,
+		Schema: ResourceRuntimeconfigVariable(),
+	}.Register()
 }
 {{- end }}

@@ -13,6 +13,7 @@ import (
     "github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
     tpgserviceusage "github.com/hashicorp/terraform-provider-google/google/services/serviceusage"
+    "github.com/hashicorp/terraform-provider-google/google/registry"
     "github.com/hashicorp/terraform-provider-google/google/tpgresource"
     transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
     "github.com/hashicorp/terraform-provider-google/google/verify"
@@ -20,11 +21,6 @@ import (
     "google.golang.org/api/googleapi"
     "google.golang.org/api/serviceusage/v1"
 )
-
-// These services can only be enabled as a side-effect of enabling other services,
-// so don't bother storing them in the config or using them for diffing.
-var ignoredProjectServices = []string{"dataproc-control.googleapis.com", "source.googleapis.com", "stackdriverprovisioning.googleapis.com"}
-var ignoredProjectServicesSet = tpgresource.GolangSetFromStringSlice(ignoredProjectServices)
 
 // Services that can't be user-specified but are otherwise valid. Renamed
 // services should be added to this set during major releases.
@@ -65,7 +61,7 @@ var renamedServicesByOldAndNewServiceNames = tpgresource.MergeStringMaps(Renamed
 const maxServiceUsageBatchSize = 20
 
 func validateProjectServiceService(val interface{}, key string) (warns []string, errs []error) {
-	bannedServicesFunc := verify.StringNotInSlice(append(ignoredProjectServices, bannedProjectServices...), false)
+	bannedServicesFunc := verify.StringNotInSlice(bannedProjectServices, false)
 	warns, errs = bannedServicesFunc(val, key)
 	if len(errs) > 0 {
 		return
@@ -124,13 +120,11 @@ func ResourceGoogleProjectService() *schema.Resource {
 			"disable_on_destroy": {
 				Type:     schema.TypeBool,
 				Optional: true,
-				Default:  true,
 			},
       {{- if ne $.TargetVersionName "ga" }}
 			"check_if_service_has_usage_on_destroy": {
 				Type:     schema.TypeBool,
 				Optional: true,
-				Default:  false,
 			},
       {{- end }}
 		},
@@ -342,4 +336,13 @@ func disableServiceUsageProjectService(service, project string, d *schema.Resour
 		return fmt.Errorf("Error disabling service %q for project %q: %v", service, project, err)
 	}
 	return nil
+}
+
+func init() {
+	registry.Schema{
+		Name: "google_project_service",
+		ProductName: "resourcemanager",
+		Type: registry.SchemaTypeResource,
+		Schema: ResourceGoogleProjectService(),
+	}.Register()
 }

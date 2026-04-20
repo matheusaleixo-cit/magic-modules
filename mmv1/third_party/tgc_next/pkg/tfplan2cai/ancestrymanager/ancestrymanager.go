@@ -11,10 +11,10 @@ import (
 	crmv3 "google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/storage/v1"
 
-	"github.com/GoogleCloudPlatform/terraform-google-conversion/v6/pkg/caiasset"
+	"github.com/GoogleCloudPlatform/terraform-google-conversion/v7/pkg/caiasset"
 
-	"github.com/GoogleCloudPlatform/terraform-google-conversion/v6/pkg/tpgresource"
-	transport_tpg "github.com/GoogleCloudPlatform/terraform-google-conversion/v6/pkg/transport"
+	"github.com/GoogleCloudPlatform/terraform-google-conversion/v7/pkg/tpgresource"
+	transport_tpg "github.com/GoogleCloudPlatform/terraform-google-conversion/v7/pkg/transport"
 
 	"go.uber.org/zap"
 )
@@ -164,15 +164,6 @@ func (m *manager) fetchAncestors(config *transport_tpg.Config, tfData tpgresourc
 			return nil, fmt.Errorf("organization id not found in terraform data")
 		}
 		key = orgKey
-	case "iam.googleapis.com/Role":
-		// google_organization_iam_custom_role or google_project_iam_custom_role
-		if orgOK {
-			key = orgKey
-		} else if projectKey != "" {
-			key = projectKey
-		} else {
-			return []string{unknownOrg}, nil
-		}
 	case "cloudresourcemanager.googleapis.com/Project", "cloudbilling.googleapis.com/ProjectBillingInfo":
 		// for google_project and google_project_iam resources
 		var ancestors []string
@@ -205,12 +196,24 @@ func (m *manager) fetchAncestors(config *transport_tpg.Config, tfData tpgresourc
 			return []string{unknownOrg}, nil
 		}
 		key = projectKey
-
-	default:
+	case "apigee.googleapis.com/Instance":
+		// Project is used to find the ancestors.
+		// org_id in resource `google_apigee_instance` is the apigee org id under a project.
 		if projectKey == "" {
 			return []string{unknownOrg}, nil
 		}
 		key = projectKey
+	default:
+		switch {
+		case orgOK:
+			key = orgKey
+		case folderOK:
+			key = folderKey
+		case projectKey != "":
+			key = projectKey
+		default:
+			return []string{unknownOrg}, nil
+		}
 	}
 	return m.getAncestorsWithCache(key)
 }
@@ -387,16 +390,22 @@ func (m *manager) SetAncestors(d tpgresource.TerraformResourceData, config *tran
 		return fmt.Errorf("getting resource ancestry or parent failed: %w", err)
 	}
 
-	cai.Resource.Parent = parent
+	if cai.Resource != nil {
+		cai.Resource.Parent = parent
+	}
 	cai.Ancestors = ancestors
 	return nil
 }
 
-// type NoOpAncestryManager struct{}
+type NoOpAncestryManager struct{}
 
-// func (*NoOpAncestryManager) Ancestors(config *transport_tpg.Config, tfData tpgresource.TerraformResourceData, cai *resources.Asset) ([]string, string, error) {
-// 	return nil, "", nil
-// }
+func (*NoOpAncestryManager) Ancestors(config *transport_tpg.Config, tfData tpgresource.TerraformResourceData, cai *caiasset.Asset) ([]string, string, error) {
+	return nil, "", nil
+}
+
+func (*NoOpAncestryManager) SetAncestors(d tpgresource.TerraformResourceData, config *transport_tpg.Config, cai *caiasset.Asset) error {
+	return nil
+}
 
 func ensurePrefix(s, pre string) string {
 	if strings.HasPrefix(s, pre) {

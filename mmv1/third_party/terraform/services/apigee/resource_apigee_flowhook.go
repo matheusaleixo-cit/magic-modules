@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 )
@@ -223,8 +224,8 @@ func resourceApigeeFlowhookDelete(d *schema.ResourceData, meta interface{}) erro
 func resourceApigeeFlowhookImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	config := meta.(*transport_tpg.Config)
 	if err := tpgresource.ParseImportId([]string{
-		"organizations/(?P<org_id>[^/]+)/environments/(?P<environment>[^/]+)/flowhooks/(?P<flow_hook_point>[^/]+)",
-		"(?P<org_id>[^/]+)/(?P<environment>[^/]+)/(?P<flow_hook_point>[^/]+)",
+		"^organizations/(?P<org_id>[^/]+)/environments/(?P<environment>[^/]+)/flowhooks/(?P<flow_hook_point>[^/]+)$",
+		"^(?P<org_id>[^/]+)/(?P<environment>[^/]+)/(?P<flow_hook_point>[^/]+)$",
 	}, d, config); err != nil {
 		return nil, err
 	}
@@ -261,4 +262,13 @@ func expandApigeeFlowhookSharedflow(v interface{}, d tpgresource.TerraformResour
 
 func expandApigeeFlowhookContinueOnError(v interface{}, d tpgresource.TerraformResourceData, config *transport_tpg.Config) (interface{}, error) {
 	return v, nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_apigee_flowhook",
+		ProductName: "apigee",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceApigeeFlowhook(),
+	}.Register()
 }

@@ -14,7 +14,7 @@ import (
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 )
 
-// Validate that replica count is updated for the instance
+// Validate that replica count is updated for the instance: 1->2->0
 func TestAccMemorystoreInstance_updateReplicaCount(t *testing.T) {
 	t.Parallel()
 
@@ -44,8 +44,17 @@ func TestAccMemorystoreInstance_updateReplicaCount(t *testing.T) {
 				ImportStateVerify: true,
 			},
 			{
+				// update the replica count to 0
+				Config: createOrUpdateMemorystoreInstance(&InstanceParams{name: name, replicaCount: 0, shardCount: 3, preventDestroy: true, zoneDistributionMode: "MULTI_ZONE", deletionProtectionEnabled: false, maintenanceDay: "MONDAY", maintenanceHours: 1, maintenanceMinutes: 0, maintenanceSeconds: 0, maintenanceNanos: 0}),
+			},
+			{
+				ResourceName:      "google_memorystore_instance.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
 				// clean up the resource
-				Config: createOrUpdateMemorystoreInstance(&InstanceParams{name: name, replicaCount: 2, shardCount: 3, preventDestroy: false, zoneDistributionMode: "MULTI_ZONE", deletionProtectionEnabled: false, maintenanceDay: "MONDAY", maintenanceHours: 1, maintenanceMinutes: 0, maintenanceSeconds: 0, maintenanceNanos: 0}),
+				Config: createOrUpdateMemorystoreInstance(&InstanceParams{name: name, replicaCount: 0, shardCount: 3, preventDestroy: false, zoneDistributionMode: "MULTI_ZONE", deletionProtectionEnabled: false, maintenanceDay: "MONDAY", maintenanceHours: 1, maintenanceMinutes: 0, maintenanceSeconds: 0, maintenanceNanos: 0}),
 			},
 		},
 	})
@@ -561,9 +570,10 @@ func TestAccMemorystoreInstance_switchoverAndDetachSecondary(t *testing.T) {
 				}),
 			},
 			{
-				ResourceName:      "google_memorystore_instance.test_secondary",
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            "google_memorystore_instance.test_secondary",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"update_time"},
 			},
 			{
 				// Switchover to secondary instance
@@ -578,9 +588,10 @@ func TestAccMemorystoreInstance_switchoverAndDetachSecondary(t *testing.T) {
 				}),
 			},
 			{
-				ResourceName:      "google_memorystore_instance.test_secondary",
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            "google_memorystore_instance.test_secondary",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"update_time"},
 			},
 			{
 				// Detach secondary instance and delete the instances
@@ -1443,4 +1454,518 @@ resource "google_compute_network" "producer_net" {
 data "google_project" "project" {
 }
 `, params.name, params.replicaCount, params.shardCount, params.nodeType, params.deletionProtectionEnabled, params.engineVersion, strBuilder.String(), zoneDistributionConfigBlock, maintenancePolicyBlock, persistenceBlock, lifecycleBlock, secondaryInstanceBlock, params.name, params.name, params.name)
+}
+
+func TestAccMemorystoreInstance_memorystoreInstanceTlsEnabled(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]interface{}{
+		"random_suffix": acctest.RandString(t, 10),
+		// Until https://github.com/hashicorp/terraform-provider-google/issues/23619 is fixed, use regions other than us-central1 to prevent issues like https://github.com/hashicorp/terraform-provider-google/issues/23543
+		"location": "us-east1",
+	}
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccCheckMemorystoreInstanceDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccMemorystoreInstance_memorystoreInstanceTlsEnabled(context),
+				Check:  resource.TestCheckResourceAttrSet("google_memorystore_instance.instance-tls", "managed_server_ca.0.ca_certs.0.certificates.0"),
+			},
+			{
+				ResourceName:            "google_memorystore_instance.instance-tls",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"gcs_source", "instance_id", "labels", "location", "managed_backup_source", "terraform_labels"},
+			},
+		},
+	})
+}
+
+func testAccMemorystoreInstance_memorystoreInstanceTlsEnabled(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-tls" {
+  instance_id = "tf-test-tls-instance%{random_suffix}"
+  shard_count = 1
+  desired_auto_created_endpoints {
+    network    = google_compute_network.producer_net.id
+    project_id = data.google_project.project.project_id
+  }
+  location                    = "%{location}"
+  deletion_protection_enabled = false
+  maintenance_policy {
+    weekly_maintenance_window {
+      day = "MONDAY"
+      start_time {
+        hours = 1
+        minutes = 0
+        seconds = 0
+        nanos = 0
+      }
+    }
+  }
+  depends_on = [
+    google_network_connectivity_service_connection_policy.default
+  ]
+  transit_encryption_mode = "SERVER_AUTHENTICATION"
+}
+
+resource "google_network_connectivity_service_connection_policy" "default" {
+  name          = "tf-test-my-policy%{random_suffix}"
+  location      = "%{location}"
+  service_class = "gcp-memorystore"
+  description   = "my basic service connection policy"
+  network       = google_compute_network.producer_net.id
+  psc_config {
+    subnetworks = [google_compute_subnetwork.producer_subnet.id]
+  }
+}
+
+resource "google_compute_subnetwork" "producer_subnet" {
+  name          = "tf-test-my-subnet%{random_suffix}"
+  ip_cidr_range = "10.0.0.248/29"
+  region        = "%{location}"
+  network       = google_compute_network.producer_net.id
+}
+
+resource "google_compute_network" "producer_net" {
+  name                    = "tf-test-my-network%{random_suffix}"
+  auto_create_subnetworks = false
+}
+
+data "google_project" "project" {
+}
+`, context)
+}
+
+func TestAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]interface{}{
+		"random_suffix": acctest.RandString(t, 10),
+		"location":      "us-central1",
+	}
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccCheckMemorystoreInstanceDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled_bothConnections(context),
+			},
+			{
+				ResourceName:            "google_memorystore_instance.instance-cluster-disabled",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"desired_auto_created_endpoints.#", "desired_auto_created_endpoints.0.%", "desired_auto_created_endpoints.0.project_id", "desired_auto_created_endpoints.0.network", "desired_psc_auto_connections.#", "desired_psc_auto_connections.0.%", "desired_psc_auto_connections.0.network", "desired_psc_auto_connections.0.project_id"},
+			},
+			{
+				Config: testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabledPscAutoConnections(context),
+			},
+			{
+				ResourceName:            "google_memorystore_instance.instance-cluster-disabled",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"desired_auto_created_endpoints.#", "desired_auto_created_endpoints.0.%", "desired_auto_created_endpoints.0.project_id", "desired_auto_created_endpoints.0.network", "desired_psc_auto_connections.#", "desired_psc_auto_connections.0.%", "desired_psc_auto_connections.0.network", "desired_psc_auto_connections.0.project_id"},
+			},
+			{
+				Config: testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled_onlyAutoCreatedEndpoints(context),
+			},
+			{
+				ResourceName:            "google_memorystore_instance.instance-cluster-disabled",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"desired_auto_created_endpoints.#", "desired_auto_created_endpoints.0.%", "desired_auto_created_endpoints.0.project_id", "desired_auto_created_endpoints.0.network", "desired_psc_auto_connections.#", "desired_psc_auto_connections.0.%", "desired_psc_auto_connections.0.network", "desired_psc_auto_connections.0.project_id"},
+			},
+			{
+				Config: testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled_neitherConnection(context),
+			},
+			{
+				ResourceName:            "google_memorystore_instance.instance-cluster-disabled",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"desired_auto_created_endpoints.#", "desired_auto_created_endpoints.0.%", "desired_auto_created_endpoints.0.project_id", "desired_auto_created_endpoints.0.network", "desired_psc_auto_connections.#", "desired_psc_auto_connections.0.%", "desired_psc_auto_connections.0.network", "desired_psc_auto_connections.0.project_id"},
+			},
+		},
+	})
+}
+
+func testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabledPscAutoConnections(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-cluster-disabled" {
+  instance_id                  = "tf-test-instance-psc%{random_suffix}"
+  shard_count                  = 1
+  desired_psc_auto_connections {
+    network                    = google_compute_network.producer_net.id
+    project_id                 = data.google_project.project.project_id
+  }
+  location                     = "%{location}"
+  deletion_protection_enabled  = false
+  mode                         = "CLUSTER_DISABLED"
+  depends_on = [
+    google_network_connectivity_service_connection_policy.default
+  ]
+}
+
+resource "google_network_connectivity_service_connection_policy" "default" {
+  name                           = "tf-test-my-policy%{random_suffix}"
+  location                       = "%{location}"
+  service_class                  = "gcp-memorystore"
+  description                    = "my basic service connection policy"
+  network                        = google_compute_network.producer_net.id
+  psc_config {
+    subnetworks                  = [google_compute_subnetwork.producer_subnet.id]
+  }
+}
+
+resource "google_compute_subnetwork" "producer_subnet" {
+  name                           = "tf-test-my-subnet%{random_suffix}"
+  ip_cidr_range                  = "10.0.0.248/29"
+  region                         = "%{location}"
+  network                        = google_compute_network.producer_net.id
+}
+
+resource "google_compute_network" "producer_net" {
+  name                           = "tf-test-my-network%{random_suffix}"
+  auto_create_subnetworks        = false
+}
+
+data "google_project" "project" {
+}
+`, context)
+}
+
+func testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled_bothConnections(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-cluster-disabled" {
+  instance_id                  = "tf-test-instance-psc%{random_suffix}"
+  shard_count                  = 1
+  desired_psc_auto_connections {
+    network                    = google_compute_network.producer_net.id
+    project_id                 = data.google_project.project.project_id
+  }
+  desired_auto_created_endpoints {
+    network                    = google_compute_network.producer_net.id
+    project_id                 = data.google_project.project.project_id
+  }
+  location                     = "%{location}"
+  deletion_protection_enabled  = false
+  mode                         = "CLUSTER_DISABLED"
+  depends_on = [
+    google_network_connectivity_service_connection_policy.default
+  ]
+}
+
+resource "google_network_connectivity_service_connection_policy" "default" {
+  name                           = "tf-test-my-policy%{random_suffix}"
+  location                       = "%{location}"
+  service_class                  = "gcp-memorystore"
+  description                    = "my basic service connection policy"
+  network                        = google_compute_network.producer_net.id
+  psc_config {
+    subnetworks                  = [google_compute_subnetwork.producer_subnet.id]
+  }
+}
+
+resource "google_compute_subnetwork" "producer_subnet" {
+  name                           = "tf-test-my-subnet%{random_suffix}"
+  ip_cidr_range                  = "10.0.0.248/29"
+  region                         = "%{location}"
+  network                        = google_compute_network.producer_net.id
+}
+
+resource "google_compute_network" "producer_net" {
+  name                           = "tf-test-my-network%{random_suffix}"
+  auto_create_subnetworks        = false
+}
+
+data "google_project" "project" {
+}
+`, context)
+}
+
+func testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled_onlyAutoCreatedEndpoints(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-cluster-disabled" {
+  instance_id                  = "tf-test-instance-psc%{random_suffix}"
+  shard_count                  = 1
+  desired_auto_created_endpoints {
+    network                    = google_compute_network.producer_net.id
+    project_id                 = data.google_project.project.project_id
+  }
+  location                     = "%{location}"
+  deletion_protection_enabled  = false
+  mode                         = "CLUSTER_DISABLED"
+  depends_on = [
+    google_network_connectivity_service_connection_policy.default
+  ]
+}
+
+resource "google_network_connectivity_service_connection_policy" "default" {
+  name                           = "tf-test-my-policy%{random_suffix}"
+  location                       = "%{location}"
+  service_class                  = "gcp-memorystore"
+  description                    = "my basic service connection policy"
+  network                        = google_compute_network.producer_net.id
+  psc_config {
+    subnetworks                  = [google_compute_subnetwork.producer_subnet.id]
+  }
+}
+
+resource "google_compute_subnetwork" "producer_subnet" {
+  name                           = "tf-test-my-subnet%{random_suffix}"
+  ip_cidr_range                  = "10.0.0.248/29"
+  region                         = "%{location}"
+  network                        = google_compute_network.producer_net.id
+}
+
+resource "google_compute_network" "producer_net" {
+  name                           = "tf-test-my-network%{random_suffix}"
+  auto_create_subnetworks        = false
+}
+
+data "google_project" "project" {
+}
+`, context)
+}
+
+func testAccMemorystoreInstance_memorystorePscAutoInstanceClusterDisabled_neitherConnection(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-cluster-disabled" {
+  instance_id                  = "tf-test-instance-psc%{random_suffix}"
+  shard_count                  = 1
+  location                     = "%{location}"
+  deletion_protection_enabled  = false
+  mode                         = "CLUSTER_DISABLED"
+  depends_on = [
+    google_network_connectivity_service_connection_policy.default
+  ]
+}
+
+resource "google_network_connectivity_service_connection_policy" "default" {
+  name                           = "tf-test-my-policy%{random_suffix}"
+  location                       = "%{location}"
+  service_class                  = "gcp-memorystore"
+  description                    = "my basic service connection policy"
+  network                        = google_compute_network.producer_net.id
+  psc_config {
+    subnetworks                  = [google_compute_subnetwork.producer_subnet.id]
+  }
+}
+
+resource "google_compute_subnetwork" "producer_subnet" {
+  name                           = "tf-test-my-subnet%{random_suffix}"
+  ip_cidr_range                  = "10.0.0.248/29"
+  region                         = "%{location}"
+  network                        = google_compute_network.producer_net.id
+}
+
+resource "google_compute_network" "producer_net" {
+  name                           = "tf-test-my-network%{random_suffix}"
+  auto_create_subnetworks        = false
+}
+
+data "google_project" "project" {
+}
+`, context)
+}
+
+func TestAccMemorystoreInstance_memorystoreInstanceMaintenanceVersion(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]interface{}{
+		"random_suffix": acctest.RandString(t, 10),
+		"location":      "us-central1",
+	}
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccCheckMemorystoreInstanceDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccMemorystoreInstance_memorystoreInstanceMaintenanceVersionDeploy(context),
+			},
+			{
+				ResourceName:      "google_memorystore_instance.instance-ms",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				Config: testAccMemorystoreInstance_memorystoreInstanceMaintenanceVersionUpdate(context),
+			},
+			{
+				ResourceName:      "google_memorystore_instance.instance-ms",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func testAccMemorystoreInstance_memorystoreInstanceMaintenanceVersionDeploy(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-ms" {
+  instance_id 					= "tf-test-ms-instance%{random_suffix}"
+  shard_count 					= 1
+  location                    	= "%{location}"
+  node_type                     = "SHARED_CORE_NANO"
+  deletion_protection_enabled 	= false
+  transit_encryption_mode 		= "SERVER_AUTHENTICATION"
+}
+
+`, context)
+}
+
+func testAccMemorystoreInstance_memorystoreInstanceMaintenanceVersionUpdate(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+resource "google_memorystore_instance" "instance-ms" {
+  instance_id 					= "tf-test-ms-instance%{random_suffix}"
+  shard_count 					= 1
+  location                   	= "%{location}"
+  node_type                     = "SHARED_CORE_NANO"
+  deletion_protection_enabled 	= false
+  # maintenance_version 			= "MEMORYSTORE_20241206_00_00"
+  transit_encryption_mode 		= "SERVER_AUTHENTICATION"
+}
+`, context)
+}
+
+func TestAccMemorystoreInstance_customerManagedCas(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]interface{}{
+		"random_suffix": acctest.RandString(t, 10),
+		"location":      "us-central1",
+	}
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccCheckMemorystoreInstanceDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create instance with Customer Managed CAS
+				Config: testAccMemorystoreInstance_customerManagedCasConfig(context),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("google_memorystore_instance.instance_cas", "server_ca_mode", "CUSTOMER_MANAGED_CAS_CA"),
+					resource.TestCheckResourceAttrSet("google_memorystore_instance.instance_cas", "server_ca_pool"),
+				),
+			},
+			{
+				ResourceName:      "google_memorystore_instance.instance_cas",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// Ignore dynamic/complex fields that might cause import mismatch in test environments
+				ImportStateVerifyIgnore: []string{"instance_id", "location", "labels", "terraform_labels"},
+			},
+		},
+	})
+}
+
+func testAccMemorystoreInstance_customerManagedCasConfig(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+data "google_project" "project" {}
+
+# 1. Private CA Infrastructure
+resource "google_privateca_ca_pool" "default" {
+  name     = "tf-test-ca-pool-%{random_suffix}"
+  location = "%{location}"
+  tier     = "ENTERPRISE"
+}
+
+resource "google_privateca_certificate_authority" "default" {
+  pool                     = google_privateca_ca_pool.default.name
+  certificate_authority_id = "tf-test-ca-%{random_suffix}"
+  location                 = "%{location}"
+  config {
+    subject_config {
+      subject {
+        organization = "Google"
+        common_name  = "tf-test-memorystore-ca"
+      }
+    }
+    x509_config {
+      ca_options {
+        is_ca = true
+      }
+      key_usage {
+        base_key_usage {
+          cert_sign = true
+          crl_sign  = true
+        }
+        extended_key_usage {
+          server_auth = true
+        }
+      }
+    }
+  }
+  key_spec {
+    algorithm = "RSA_PKCS1_4096_SHA256"
+  }
+  ignore_active_certificates_on_deletion = true
+  deletion_protection = false
+  skip_grace_period   = true
+}
+
+# 2. IAM Permission for Memorystore Service Agent
+# Note the service identity: service-{project_number}@gcp-sa-memorystore.iam.gserviceaccount.com
+resource "google_privateca_ca_pool_iam_member" "memorystore_p4sa_requester" {
+  ca_pool = google_privateca_ca_pool.default.id
+  role    = "roles/privateca.certificateRequester"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-memorystore.iam.gserviceaccount.com"
+}
+
+# 3. Networking
+resource "google_network_connectivity_service_connection_policy" "default" {
+  name          = "tf-test-policy-%{random_suffix}"
+  location      = "%{location}"
+  service_class = "gcp-memorystore"
+  network       = google_compute_network.producer_net.id
+  psc_config {
+    subnetworks = [google_compute_subnetwork.producer_subnet.id]
+  }
+}
+
+resource "google_compute_subnetwork" "producer_subnet" {
+  name          = "tf-test-subnet-%{random_suffix}"
+  ip_cidr_range = "10.0.0.248/29"
+  region        = "%{location}"
+  network       = google_compute_network.producer_net.id
+}
+
+resource "google_compute_network" "producer_net" {
+  name                    = "tf-test-network-%{random_suffix}"
+  auto_create_subnetworks = false
+}
+
+# 4. Memorystore Instance with Customer Managed CAS
+resource "google_memorystore_instance" "instance_cas" {
+  instance_id = "tf-test-cas-%{random_suffix}"
+  shard_count = 3
+  location    = "%{location}"
+  
+  desired_auto_created_endpoints {
+    network    = google_compute_network.producer_net.id
+    project_id = data.google_project.project.project_id
+  }
+
+  transit_encryption_mode = "SERVER_AUTHENTICATION"
+  
+  # New fields being tested
+  server_ca_mode = "CUSTOMER_MANAGED_CAS_CA"
+  server_ca_pool = google_privateca_ca_pool.default.id
+
+  deletion_protection_enabled = false
+
+  depends_on = [
+    google_network_connectivity_service_connection_policy.default,
+    google_privateca_certificate_authority.default,
+    google_privateca_ca_pool_iam_member.memorystore_p4sa_requester
+  ]
+}
+`, context)
 }

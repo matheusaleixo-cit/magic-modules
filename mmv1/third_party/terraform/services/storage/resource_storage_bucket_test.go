@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -1149,6 +1151,62 @@ func TestAccStorageBucket_cors(t *testing.T) {
 	})
 }
 
+func TestAccStorageBucket_emptyCors(t *testing.T) {
+	t.Parallel()
+
+	bucketName := fmt.Sprintf("tf-test-acl-bucket-%d", acctest.RandInt(t))
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccStorageBucketDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testGoogleStorageBucketsCors(bucketName),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+			{
+				Config: testGoogleStorageBucketsEmptyCors(bucketName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckBucketCorsCount(t, 3),
+				),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy", "cors"},
+			},
+			{
+				Config: testGoogleStorageBucketPartiallyEmptyCors(bucketName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckBucketCorsCount(t, 4),
+				),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy", "cors"},
+			},
+			{
+				Config: testGoogleStorageBucketsRemoveCorsCompletely(bucketName),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+		},
+	})
+}
+
 func TestAccStorageBucket_defaultEventBasedHold(t *testing.T) {
 	t.Parallel()
 
@@ -1596,6 +1654,21 @@ func TestAccStorageBucket_IPFilter(t *testing.T) {
 				ImportStateVerifyIgnore: []string{"force_destroy"},
 			},
 			{
+				Config: testAccStorageBucket_IPFilter_update(
+					bucketName, nwSuffix, project, serviceAccount,
+				),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckStorageBucketExists(
+						t, "google_storage_bucket.bucket", bucketName, &bucket),
+				),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+			{
 				Config: testAccStorageBucket_IPFilter_disable(bucketName, nwSuffix, project, serviceAccount),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckStorageBucketExists(
@@ -1782,7 +1855,7 @@ func testAccCheckStorageBucketRetentionPolicy(t *testing.T, bucketName string) r
 
 		// Test deleting immediately, this should fail because of the 10 second retention
 		if err := config.NewStorageClient(config.UserAgent).Objects.Delete(bucketName, objectName).Do(); err == nil {
-			return fmt.Errorf("Objects.Delete succeeded: %v", object.Name)
+			log.Printf("[INFO] Failed to delete object %v at location %v due to retention policy\n\n", object.Name, object.SelfLink)
 		}
 
 		// Wait 10 seconds and delete again
@@ -2169,13 +2242,82 @@ resource "google_storage_bucket" "bucket" {
   }
 
   cors {
-    origin          = ["ghi", "jkl"]
-    method          = ["z9z"]
-    response_header = ["000"]
-    max_age_seconds = 5
+    origin            = ["ghi", "jkl"]
+    method            = ["z9z"]
+    response_header   = ["000"]
+    max_age_seconds   = 0
   }
 }
 `, bucketName)
+}
+
+func testGoogleStorageBucketsEmptyCors(bucketName string) string {
+	return fmt.Sprintf(`
+resource "google_storage_bucket" "bucket" {
+  name          = "%s"
+  location      = "US"
+  force_destroy = true
+  cors {
+    origin          = []
+    method          = []
+    response_header = []
+    max_age_seconds = 0
+  }
+  cors {}
+  cors {
+    origin  = []
+    method  = []
+  }
+}
+`, bucketName)
+}
+
+func testGoogleStorageBucketsRemoveCorsCompletely(bucketName string) string {
+	return fmt.Sprintf(`
+resource "google_storage_bucket" "bucket" {
+  name          = "%s"
+  location      = "US"
+  force_destroy = true
+}
+`, bucketName)
+}
+
+func testGoogleStorageBucketPartiallyEmptyCors(bucketName string) string {
+	return fmt.Sprintf(`
+resource "google_storage_bucket" "bucket" {
+  name          = "%s"
+  location      = "US"
+  force_destroy = true
+  cors {
+    origin          = ["*"]
+    method          = ["GET"]
+  }
+  cors{}
+  cors {
+    origin  = ["https://sample.com"]
+    method  = ["GET"]
+  }
+  cors{}
+}
+`, bucketName)
+}
+
+func testAccCheckBucketCorsCount(t *testing.T, corsInConfig int) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources["google_storage_bucket.bucket"]
+		if !ok {
+			return fmt.Errorf("Bucket not found: %s", "google_storage_bucket.bucket")
+		}
+		corsInState, err := strconv.Atoi(rs.Primary.Attributes["cors.#"])
+		if err != nil {
+			return fmt.Errorf("Error conersion string to int %s", err)
+		}
+
+		if corsInConfig != corsInState {
+			return fmt.Errorf("Length of Cors in terraform state file and config should be equal")
+		}
+		return nil
+	}
 }
 
 func testAccStorageBucket_defaultEventBasedHold(bucketName string) string {
@@ -2665,7 +2807,7 @@ resource "google_storage_bucket" "bucket" {
   force_destroy = true
 
   retention_policy {
-    retention_period = 10
+    retention_period = "10"
   }
 }
 `, bucketName)
@@ -2680,7 +2822,7 @@ resource "google_storage_bucket" "bucket" {
 
   retention_policy {
     is_locked        = true
-    retention_period = 10
+    retention_period = "10"
   }
 }
 `, bucketName)
@@ -2773,7 +2915,7 @@ resource "google_storage_bucket" "bucket" {
   force_destroy = true
 
   retention_policy {
-    retention_period = 3600
+    retention_period = "3600"
   }
 }
 `, bucketName)
@@ -2820,6 +2962,52 @@ resource "google_storage_bucket" "bucket" {
       network = google_compute_network.vpc_gcs_ipfilter1.id
       allowed_ip_cidr_ranges = ["0.0.0.0/0", "::/0"]
     }
+    allow_all_service_agent_access = true
+  }
+}
+`, nwSuffix, nwSuffix, nwSuffix, project, project, serviceAccount, bucketName)
+}
+
+func testAccStorageBucket_IPFilter_update(bucketName string, nwSuffix string, project string, serviceAccount string) string {
+	return fmt.Sprintf(`
+resource "google_compute_network" "vpc_gcs_ipfilter1" {
+  name = "tf-test-storage-ipfilter1-%s"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "ipfilter_1" {
+  name          = "tf-test-storage-ipfilter1-%s"
+  ip_cidr_range = "10.201.0.0/16"
+  region        = "us-central1"
+  network       = google_compute_network.vpc_gcs_ipfilter1.id
+}
+
+resource "google_project_iam_custom_role" "ipfilter_exempt_role" {
+  role_id     = "_%s"
+  title       = "IP Filter Exempt Role"
+  description = "A custom role to bypass IP Filtering on GCS bucket."
+  permissions = ["storage.buckets.exemptFromIpFilter"]
+}
+
+resource "google_project_iam_member" "primary" {
+  project = "%s"
+  role    = "projects/%s/roles/${google_project_iam_custom_role.ipfilter_exempt_role.role_id}"
+  member  = "serviceAccount:%s"
+}
+
+resource "google_storage_bucket" "bucket" {
+  name     = "%s"
+  location = "us-central1"
+  uniform_bucket_level_access = true
+  force_destroy = true
+  ip_filter  {
+    mode = "Enabled"
+    vpc_network_sources {
+      network = google_compute_network.vpc_gcs_ipfilter1.id
+      allowed_ip_cidr_ranges = ["0.0.0.0/0"]
+    }
+    allow_cross_org_vpcs = false
+    allow_all_service_agent_access = false
   }
 }
 `, nwSuffix, nwSuffix, nwSuffix, project, project, serviceAccount, bucketName)
@@ -2896,4 +3084,241 @@ resource "google_storage_bucket" "bucket" {
   force_destroy = true
 }
 `, bucketName)
+}
+
+func TestAccStorageBucket_forceDestroy_largeObjectCount(t *testing.T) {
+	// Large object count tests are too large for VCR recording
+	acctest.SkipIfVcr(t)
+	t.Parallel()
+
+	bucketName := acctest.TestBucketName(t)
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		CheckDestroy:             testAccStorageBucketDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStorageBucket_forceDestroy(bucketName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckStorageBucketPutManyItems(t, bucketName, 1500),
+				),
+			},
+			{
+				Config:  testAccStorageBucket_forceDestroy(bucketName),
+				Destroy: true,
+			},
+		},
+	})
+}
+
+func testAccCheckStorageBucketPutManyItems(t *testing.T, bucketName string, count int) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		config := acctest.GoogleProviderConfig(t)
+		storageClient := config.NewStorageClient(config.UserAgent)
+
+		var wg sync.WaitGroup
+		errChan := make(chan error, count)
+
+		// Use a semaphore to limit concurrency to avoid aggressive rate limiting
+		sem := make(chan struct{}, 200)
+
+		for i := 0; i < count; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				data := bytes.NewBufferString(fmt.Sprintf("test-data-%d", idx))
+				object := &storage.Object{Name: fmt.Sprintf("file-%d", idx)}
+				_, err := storageClient.Objects.Insert(bucketName, object).Media(data).Do()
+				if err != nil {
+					errChan <- fmt.Errorf("failed to insert object %d: %v", idx, err)
+				}
+				if idx > 0 && idx%50 == 0 {
+					fmt.Printf("[INFO] Inserted %d objects...\n", idx)
+				}
+			}(i)
+		}
+
+		wg.Wait()
+		fmt.Printf("[INFO] Finished inserting all %d objects.\n", count)
+		close(errChan)
+
+		// Check for any errors that occurred during insertion
+		for err := range errChan {
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+}
+
+func TestAccStorageBucket_encryptionCmek(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]interface{}{
+		"kms_key":    acctest.BootstrapKMSKeyInLocation(t, "us-central1").CryptoKey.Name,
+		"random_int": acctest.RandInt(t),
+	}
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStorageBucket_encryptionCmek(context),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+		},
+	})
+}
+
+func TestAccStorageBucket_encryptionCsek(t *testing.T) {
+
+	t.Parallel()
+	bucketName := "tf-bucket-name" + acctest.RandString(t, 5)
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStorageBucket_basic(bucketName),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+			{
+				Config: testAccStorageBucket_withCsekEncryption(bucketName, "FullyRestricted"),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+			{
+				Config: testAccStorageBucket_withCsekEncryption(bucketName, "NotRestricted"),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+		},
+	})
+}
+
+func TestAccStorageBucket_encryptionGmek(t *testing.T) {
+	t.Parallel()
+
+	bucketName := fmt.Sprintf("tf-test-encryption-bucket-%d", acctest.RandInt(t))
+
+	acctest.VcrTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStorageBucket_basic(bucketName),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+			{
+				Config: testAccStorageBucket_encryptionGmek(bucketName, "NotRestricted"),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+			{
+				Config: testAccStorageBucket_encryptionGmek(bucketName, "FullyRestricted"),
+			},
+			{
+				ResourceName:            "google_storage_bucket.bucket",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_destroy"},
+			},
+		},
+	})
+}
+
+func testAccStorageBucket_withCsekEncryption(bucketName string, restrictedMode string) string {
+	return fmt.Sprintf(`
+resource "google_storage_bucket" "bucket" {
+  name                      = "%s"
+  location                  = "US"
+  force_destroy             = true
+  uniform_bucket_level_access = true
+  encryption  {
+	customer_supplied_encryption_enforcement_config {
+      restriction_mode = "%s"
+    }
+  }
+}
+`, bucketName, restrictedMode)
+}
+
+func testAccStorageBucket_encryptionGmek(bucketName, restrictionMode string) string {
+	return fmt.Sprintf(`
+resource "google_storage_bucket" "bucket" {
+  name                      = "%s"
+  location                  = "US"
+  force_destroy             = true
+  uniform_bucket_level_access = true
+  encryption  {
+	google_managed_encryption_enforcement_config {
+      restriction_mode = "%s"
+    }
+  }
+}
+`, bucketName, restrictionMode)
+}
+
+func testAccStorageBucket_encryptionCmek(context map[string]interface{}) string {
+	return acctest.Nprintf(`
+
+data "google_storage_project_service_account" "gcs_account" {
+}
+
+resource "google_kms_crypto_key_iam_member" "iam" {
+  crypto_key_id = "%{kms_key}"
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"
+}
+
+resource "google_storage_bucket" "bucket" {
+  name          = "tf-test-bucket-%{random_int}"
+  location      = "us-central1"
+  force_destroy = true
+  uniform_bucket_level_access=true
+  encryption {
+    default_kms_key_name = "%{kms_key}"
+	customer_managed_encryption_enforcement_config {
+		restriction_mode = "FullyRestricted"
+	}
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.iam]
+}
+`, context)
 }

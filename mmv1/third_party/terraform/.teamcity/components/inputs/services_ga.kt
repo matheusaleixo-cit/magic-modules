@@ -1,5 +1,5 @@
 /*
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2014, 2026
  * SPDX-License-Identifier: MPL-2.0
  */
 
@@ -91,6 +91,11 @@ var ServicesListGa = mapOf(
         "displayName" to "Biglake",
         "path" to "./google/services/biglake"
     ),
+    "biglakeiceberg" to mapOf(
+        "name" to "biglakeiceberg",
+        "displayName" to "BiglakeIceberg",
+        "path" to "./google/services/biglakeiceberg"
+    ),
     "bigquery" to mapOf(
         "name" to "bigquery",
         "displayName" to "Bigquery",
@@ -110,6 +115,11 @@ var ServicesListGa = mapOf(
         "name" to "bigquerydatapolicy",
         "displayName" to "Bigquerydatapolicy",
         "path" to "./google/services/bigquerydatapolicy"
+    ),
+    "bigquerydatapolicyv2" to mapOf(
+        "name" to "bigquerydatapolicyv2",
+        "displayName" to "Bigquerydatapolicyv2",
+        "path" to "./google/services/bigquerydatapolicyv2"
     ),
     "bigquerydatatransfer" to mapOf(
         "name" to "bigquerydatatransfer",
@@ -145,6 +155,11 @@ var ServicesListGa = mapOf(
         "name" to "certificatemanager",
         "displayName" to "Certificatemanager",
         "path" to "./google/services/certificatemanager"
+    ),
+    "ces" to mapOf(
+        "name" to "ces",
+        "displayName" to "Customerengagementsuite",
+        "path" to "./google/services/ces"
     ),
     "chronicle" to mapOf(
         "name" to "chronicle",
@@ -216,6 +231,11 @@ var ServicesListGa = mapOf(
         "displayName" to "Cloudscheduler",
         "path" to "./google/services/cloudscheduler"
     ),
+     "cloudsecuritycompliance" to mapOf(
+        "name" to "cloudsecuritycompliance",
+        "displayName" to "Cloud Security Compliance",
+        "path" to "./google/services/cloudsecuritycompliance"
+    ),
     "cloudtasks" to mapOf(
         "name" to "cloudtasks",
         "displayName" to "Cloudtasks",
@@ -235,6 +255,11 @@ var ServicesListGa = mapOf(
         "name" to "compute",
         "displayName" to "Compute",
         "path" to "./google/services/compute"
+    ),
+    "contactcenterinsights" to mapOf(
+        "name" to "contactcenterinsights",
+        "displayName" to "Contact Center AI Insights",
+        "path" to "./google/services/contactcenterinsights"
     ),
     "container" to mapOf(
         "name" to "container",
@@ -396,6 +421,11 @@ var ServicesListGa = mapOf(
         "displayName" to "Firebase",
         "path" to "./google/services/firebase"
     ),
+    "firebaseailogic" to mapOf(
+        "name" to "firebaseailogic",
+        "displayName" to "Firebase AI Logic",
+        "path" to "./google/services/firebaseailogic"
+    ),
     "firebaseappcheck" to mapOf(
         "name" to "firebaseappcheck",
         "displayName" to "Firebaseappcheck",
@@ -465,6 +495,11 @@ var ServicesListGa = mapOf(
         "name" to "healthcare",
         "displayName" to "Healthcare",
         "path" to "./google/services/healthcare"
+    ),
+    "hypercomputecluster" to mapOf(
+        "name" to "hypercomputecluster",
+        "displayName" to "ClusterDirector",
+        "path" to "./google/services/hypercomputecluster"
     ),
     "iam2" to mapOf(
         "name" to "iam2",
@@ -551,6 +586,16 @@ var ServicesListGa = mapOf(
         "displayName" to "Mlengine",
         "path" to "./google/services/mlengine"
     ),
+    "modelarmor" to mapOf(
+        "name" to "modelarmor",
+        "displayName" to "ModelArmor",
+        "path" to "./google/services/modelarmor"
+    ),
+    "modelarmorglobal" to mapOf(
+        "name" to "modelarmorglobal",
+        "displayName" to "ModelArmorGlobal",
+        "path" to "./google/services/modelarmorglobal"
+    ),
     "monitoring" to mapOf(
         "name" to "monitoring",
         "displayName" to "Monitoring",
@@ -565,6 +610,11 @@ var ServicesListGa = mapOf(
         "name" to "networkconnectivity",
         "displayName" to "Networkconnectivity",
         "path" to "./google/services/networkconnectivity"
+    ),
+    "networkconnectivityv1" to mapOf(
+        "name" to "networkconnectivityv1",
+        "displayName" to "Networkconnectivityv1",
+        "path" to "./google/services/networkconnectivityv1"
     ),
     "networkmanagement" to mapOf(
         "name" to "networkmanagement",
@@ -585,6 +635,11 @@ var ServicesListGa = mapOf(
         "name" to "notebooks",
         "displayName" to "Notebooks",
         "path" to "./google/services/notebooks"
+    ),
+    "observability" to mapOf(
+        "name" to "observability",
+        "displayName" to "Observability",
+        "path" to "./google/services/observability"
     ),
     "oracledatabase" to mapOf(
         "name" to "oracledatabase",
@@ -675,6 +730,11 @@ var ServicesListGa = mapOf(
         "name" to "runtimeconfig",
         "displayName" to "Runtimeconfig",
         "path" to "./google/services/runtimeconfig"
+    ),
+    "saasruntime" to mapOf(
+        "name" to "saasruntime",
+        "displayName" to "SaaS Runtime",
+        "path" to "./google/services/saasruntime"
     ),
     "secretmanager" to mapOf(
         "name" to "secretmanager",
@@ -791,11 +851,6 @@ var ServicesListGa = mapOf(
         "displayName" to "Tags",
         "path" to "./google/services/tags"
     ),
-    "tpu" to mapOf(
-        "name" to "tpu",
-        "displayName" to "Tpu",
-        "path" to "./google/services/tpu"
-    ),
     "tpuv2" to mapOf(
         "name" to "tpuv2",
         "displayName" to "Tpuv2",
@@ -805,6 +860,11 @@ var ServicesListGa = mapOf(
         "name" to "transcoder",
         "displayName" to "Transcoder",
         "path" to "./google/services/transcoder"
+    ),
+    "vectorsearch" to mapOf(
+        "name" to "vectorsearch",
+        "displayName" to "VectorSearch",
+        "path" to "./google/services/vectorsearch",
     ),
     "vertexai" to mapOf(
         "name" to "vertexai",
@@ -825,6 +885,11 @@ var ServicesListGa = mapOf(
         "name" to "workbench",
         "displayName" to "Workbench",
         "path" to "./google/services/workbench"
+    ),
+    "workloadidentity" to mapOf(
+        "name" to "workloadidentity",
+        "displayName" to "Workload Identity",
+        "path" to "./google/services/workloadidentity"
     ),
     "workflows" to mapOf(
         "name" to "workflows",

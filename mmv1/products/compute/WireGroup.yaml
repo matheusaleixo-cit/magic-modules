@@ -20,8 +20,7 @@ description: |
 references:
   guides:
     'Create a WireGroup': 'https://cloud.google.com/network-connectivity/docs/interconnect/how-to/cross-site/modify-network#add-wire-group'
-  api: 'https://cloud.google.com/compute/docs/reference/rest/beta/wireGroups'
-min_version: beta
+  api: 'https://cloud.google.com/compute/docs/reference/rest/v1/wireGroups'
 docs:
 id_format: 'projects/{{project}}/global/crossSiteNetworks/{{cross_site_network}}/wireGroups/{{name}}'
 base_url: 'projects/{{project}}/global/crossSiteNetworks/{{cross_site_network}}/wireGroups'
@@ -41,8 +40,6 @@ async:
     base_url: '{{op_id}}'
   result:
     resource_inside_response: false
-custom_code:
-  test_check_destroy: 'templates/terraform/custom_check_destroy/wire_group.go.tmpl'
 examples:
   - name: 'compute_wire_group_basic'
     primary_resource_id: 'example-test-wire-group'
@@ -50,9 +47,23 @@ examples:
       name: 'test-wire-group'
       description: 'Example Wire Group'
       cross_site_network: 'test-cross-site-network'
-    min_version: 'beta'
+    test_vars_overrides:
+      # for backward compatible
+      description: '"Example Wire Group" + randomSuffix'
     test_env_vars:
       project: 'PROJECT_NAME'
+  - name: 'compute_wire_group_basic_beta'
+    primary_resource_id: 'example-test-wire-group-beta'
+    vars:
+      name: 'test-wire-group-beta'
+      description: 'Example Wire Group Beta'
+      cross_site_network: 'test-cross-site-network-beta'
+    test_vars_overrides:
+      # for backward compatible
+      description: '"Example Wire Group Beta" + randomSuffix'
+    test_env_vars:
+      project: 'PROJECT_NAME'
+    min_version: 'beta'
 parameters:
   - name: 'crossSiteNetwork'
     type: ResourceRef
@@ -64,7 +75,6 @@ parameters:
     imports: 'name'
     diff_suppress_func: 'tpgresource.CompareResourceNames'
     custom_expand: 'templates/terraform/custom_expand/resourceref_with_validation.go.tmpl'
-    min_version: beta
 properties:
   - name: 'description'
     type: String
@@ -87,43 +97,47 @@ properties:
     validation:
       regex: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
   - name: endpoints
-    type: KeyValuePairs
+    type: Map
     description: |
       Endpoints grouped by location, each mapping to interconnect configurations.
-    properties:
-      - name: interconnects
-        type: KeyValuePairs
-        description: |
-          Map of interconnect details.
-        properties:
-          - name: interconnect
-            type: string
-          - name: vlan_tags
-            type: Array
+    key_name: 'endpoint'
+    value_type:
+      type: NestedObject
+      properties:
+        - name: interconnects
+          type: Map
+          key_name: interconnect_name
+          value_type:
+            type: NestedObject
             description: |
-              VLAN tags for the interconnect.
-            item_type:
-              type: integer
+              Map of interconnect details.
+            properties:
+              - name: interconnect
+                type: String
+              - name: vlanTags
+                type: Array
+                description: |
+                  VLAN tags for the interconnect.
+                item_type:
+                  type: Integer
   - name: adminEnabled
-    type: boolean
+    type: Boolean
     description: |
       Indicates whether the wire group is administratively enabled.
+    default_value: true
   - name: wireGroupProperties
     type: NestedObject
     description: |
       Properties specific to the wire group.
+    min_version: 'beta'
     properties:
       - name: type
-        type: enum
+        type: String  # Enum
         description: |
           Type of wire group (enum).
           WIRE: a single pseudowire over two Interconnect connections   with no redundancy.
           REDUNDANT: two pseudowires over four Interconnect connections, with two connections in one metro and two connections in another metro.
           BOX_AND_CROSS: four pseudowires over four Interconnect connections, with two connections in one metro and two connections in another metro.
-        enum_values:
-          - 'WIRE'
-          - 'REDUNDANT'
-          - 'BOX_AND_CROSS'
   - name: wireProperties
     type: NestedObject
     description: |
@@ -134,14 +148,19 @@ properties:
         description: |
           The unmetered bandwidth setting.
       - name: faultResponse
-        type: enum
+        type: String  # Enum
         description: |
           Response when a fault is detected in a pseudowire:
           NONE: default.
           DISABLE_PORT: set the port line protocol down when inline probes detect a fault. This setting is only permitted on port mode pseudowires.
-        enum_values:
-          - 'NONE'
-          - 'DISABLE_PORT'
+      - name: bandwidthAllocation
+        type: String  # Enum
+        required: true
+        description: |
+          The configuration of a wire's bandwidth allocation.
+          ALLOCATE_PER_WIRE: configures a separate unmetered bandwidth allocation (and associated charges) for each wire in the group.
+          SHARED_WITH_WIRE_GROUP: this is the default behavior, which configures one unmetered bandwidth allocation for the wire group. The unmetered bandwidth is divided equally across each wire in the group, but dynamic
+          throttling reallocates unused unmetered bandwidth from unused or underused wires to other wires in the group.
   - name: wires
     type: Array
     description: |
@@ -151,31 +170,38 @@ properties:
       type: NestedObject
       properties:
         - name: label
-          type: string
+          type: String
+          output: true
         - name: endpoints
           type: Array
+          output: true
           description: |
             'Wire endpoints are specific Interconnect connections.'
           item_type:
             type: NestedObject
             properties:
               - name: interconnect
-                type: string
+                type: String
+                output: true
               - name: vlanTag
-                type: integer
+                type: Integer
+                output: true
         - name: wireProperties
           type: NestedObject
-          output: true # This is redundant if the parent 'wires' is output: true, but harmless
+          output: true
           properties:
             - name: bandwidthUnmetered
               type: Integer
+              output: true
             - name: faultResponse
-              type: enum
+              type: Enum
+              output: true
               enum_values:
                 - 'NONE'
                 - 'DISABLE_PORT'
         - name: adminEnabled
-          type: boolean
+          type: Boolean
+          output: true
   - name: topology
     type: NestedObject
     description: |
@@ -184,10 +210,13 @@ properties:
     properties:
       - name: endpoints
         type: Array
+        output: true
         item_type:
           type: NestedObject
           properties:
             - name: label
-              type: string
+              type: String
+              output: true
             - name: city
-              type: string
+              type: String
+              output: true

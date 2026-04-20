@@ -5,6 +5,7 @@ import (
 
 	"regexp"
 
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 	"github.com/hashicorp/terraform-provider-google/google/verify"
@@ -28,10 +29,6 @@ func DataSourceGoogleServiceAccountKey() *schema.Resource {
 				Default:      "TYPE_X509_PEM_FILE",
 				Optional:     true,
 				ValidateFunc: validation.StringInSlice([]string{"TYPE_NONE", "TYPE_X509_PEM_FILE", "TYPE_RAW_PUBLIC_KEY"}, false),
-			},
-			"project": {
-				Type:     schema.TypeString,
-				Optional: true,
 			},
 			"key_algorithm": {
 				Type:     schema.TypeString,
@@ -82,4 +79,13 @@ func dataSourceGoogleServiceAccountKeyRead(d *schema.ResourceData, meta interfac
 	}
 
 	return nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_service_account_key",
+		ProductName: "resourcemanager",
+		Type:        registry.SchemaTypeDataSource,
+		Schema:      DataSourceGoogleServiceAccountKey(),
+	}.Register()
 }

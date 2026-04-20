@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 
@@ -240,7 +241,7 @@ func resourceGoogleServiceNetworkingPeeredDNSDomainDelete(d *schema.ResourceData
 	return nil
 }
 
-// NOTE(deviavir): An out of band aspect of this API is that it uses a unique formatting of network
+// TODO: An out of band aspect of this API is that it uses a unique formatting of network
 // different from the standard self_link URI. It requires a call to the resource manager to get the project
 // number for the current project.
 func getProjectNumber(d *schema.ResourceData, config *transport_tpg.Config, project, userAgent string) (string, error) {
@@ -263,4 +264,13 @@ func getProjectNumber(d *schema.ResourceData, config *transport_tpg.Config, proj
 	}
 
 	return strconv.FormatInt(projectCall.ProjectNumber, 10), nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_service_networking_peered_dns_domain",
+		ProductName: "servicenetworking",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceGoogleServiceNetworkingPeeredDNSDomain(),
+	}.Register()
 }

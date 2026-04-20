@@ -11,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 	"google.golang.org/api/dns/v1"
@@ -648,9 +650,9 @@ func resourceDnsRecordSetUpdate(d *schema.ResourceData, meta interface{}) error 
 func resourceDnsRecordSetImportState(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	config := meta.(*transport_tpg.Config)
 	if err := tpgresource.ParseImportId([]string{
-		"projects/(?P<project>[^/]+)/managedZones/(?P<managed_zone>[^/]+)/rrsets/(?P<name>[^/]+)/(?P<type>[^/]+)",
-		"(?P<project>[^/]+)/(?P<managed_zone>[^/]+)/(?P<name>[^/]+)/(?P<type>[^/]+)",
-		"(?P<managed_zone>[^/]+)/(?P<name>[^/]+)/(?P<type>[^/]+)",
+		"^projects/(?P<project>[^/]+)/managedZones/(?P<managed_zone>[^/]+)/rrsets/(?P<name>[^/]+)/(?P<type>[^/]+)$",
+		"^(?P<project>[^/]+)/(?P<managed_zone>[^/]+)/(?P<name>[^/]+)/(?P<type>[^/]+)$",
+		"^(?P<managed_zone>[^/]+)/(?P<name>[^/]+)/(?P<type>[^/]+)$",
 	}, d, config); err != nil {
 		return nil, err
 	}
@@ -971,4 +973,13 @@ func validateRecordNameTrailingDot(v interface{}, k string) (warnings []string, 
 		return nil, errors
 	}
 	return nil, nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_dns_record_set",
+		ProductName: "dns",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceDnsRecordSet(),
+	}.Register()
 }

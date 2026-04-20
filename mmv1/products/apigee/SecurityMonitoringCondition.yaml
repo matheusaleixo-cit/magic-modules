@@ -29,6 +29,7 @@ immutable: false
 import_format:
   - '{{org_id}}/securityMonitoringConditions/{{condition_id}}'
   - '{{org_id}}/{{condition_id}}'
+exclude_identity_generation: true
 custom_code:
   custom_import: "templates/terraform/custom_import/apigee_security_monitoring_condition.go.tmpl"
 examples:
@@ -82,12 +83,12 @@ properties:
     type: NestedObject
     exactly_one_of:
       - include_all_resources
-      # TODO(hashicorp/terraform-provider-google#22581): add this block back + test once deployment is supported
+      # TODO: hashicorp/terraform-provider-google#22581 add this block back + test once deployment is supported
       # - include
     properties: []
     send_empty_value: true
     allow_empty_object: true
-  # TODO(hashicorp/terraform-provider-google#22581): add this block back + test once deployment is supported
+  # TODO: hashicorp/terraform-provider-google#22581 add this block back + test once deployment is supported
   # - name: 'include'
   #   type: NestedObject
   #   properties:

@@ -41,6 +41,7 @@ async:
     resource_inside_response: false
   include_project: true
 custom_code:
+include_in_tgc_next: true
 examples:
   - name: 'network_security_security_profile_group_basic'
     primary_resource_id: 'default'
@@ -58,6 +59,9 @@ examples:
       endpoint_group_id: 'endpoint-group'
       security_profile_name: 'sec-profile'
       security_profile_group_name: 'sec-profile-group'
+    test_vars_overrides:
+      # for backward compatible
+      network_name: '"network" + randomSuffix'
     test_env_vars:
       org_id: 'ORG_ID'
   - name: 'network_security_security_profile_group_intercept'
@@ -69,6 +73,16 @@ examples:
       endpoint_group_id: 'endpoint-group'
       security_profile_name: 'sec-profile'
       security_profile_group_name: 'sec-profile-group'
+    test_vars_overrides:
+      # for backward compatible
+      network_name: '"network" + randomSuffix'
+    test_env_vars:
+      org_id: 'ORG_ID'
+  - name: 'network_security_security_profile_group_url_filtering'
+    primary_resource_id: 'default'
+    vars:
+      security_profile_group_name: 'sec-profile-group'
+      security_profile_name: 'sec-profile'
     test_env_vars:
       org_id: 'ORG_ID'
 parameters:
@@ -122,6 +136,11 @@ properties:
     type: String
     description: |
       Reference to a SecurityProfile with the threat prevention configuration for the SecurityProfileGroup.
+  - name: 'urlFilteringProfile'
+    type: String
+    description: |
+      Reference to a SecurityProfile with the URL filtering configuration for the SecurityProfileGroup.
+    is_missing_in_cai: true
   - name: 'customMirroringProfile'
     type: String
     description: |

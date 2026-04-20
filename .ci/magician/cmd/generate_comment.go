@@ -16,6 +16,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,6 +36,9 @@ import (
 	"github.com/GoogleCloudPlatform/magic-modules/tools/issue-labeler/labeler"
 
 	"github.com/spf13/cobra"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/parser"
+	"go.abhg.dev/goldmark/frontmatter"
 	"golang.org/x/exp/maps"
 
 	_ "embed"
@@ -85,7 +89,7 @@ type diffCommentData struct {
 	MissingServiceLabels []string
 	MissingTests         map[string]*MissingTestInfo
 	MissingDocs          *MissingDocsSummary
-	AddedResources       []string
+	MultipleResources    []string
 	Errors               []Errors
 }
 
@@ -176,7 +180,7 @@ func listGCEnvironmentVariables() string {
 func execGenerateComment(prNumber int, ghTokenMagicModules, buildId, buildStep, projectId, commitSha string, gh GithubClient, rnr ExecRunner, ctlr *source.Controller) error {
 	errors := map[string][]string{"Other": []string{}}
 
-	// TODO(ScottSuarez) - temporary fix to ensure the label is removed.
+	// TODO - temporary fix to ensure the label is removed.
 	// Once we migrate to the new trigger there is an explicit task
 	// for this and this line can be removed.
 	gh.RemoveLabel(fmt.Sprint(prNumber), "awaiting-approval")
@@ -345,6 +349,11 @@ func execGenerateComment(prNumber int, ghTokenMagicModules, buildId, buildStep, 
 				errors[repo.Title] = append(errors[repo.Title], "The missing doc detector failed to run.")
 			}
 			data.MissingDocs = missingDocs
+
+			errStrs := checkDocumentFrontmatter(repo)
+			if len(errStrs) > 0 {
+				errors[repo.Title] = append(errors[repo.Title], errStrs...)
+			}
 		}
 
 		simpleDiff, err := computeAffectedResources(diffProcessorPath, rnr, repo)
@@ -368,7 +377,8 @@ func execGenerateComment(prNumber int, ghTokenMagicModules, buildId, buildStep, 
 
 	// Check if multiple resources were added.
 	multipleResourcesState := "success"
-	if len(uniqueAddedResources) > 1 {
+	data.MultipleResources = multipleResources(maps.Keys(uniqueAddedResources))
+	if len(data.MultipleResources) > 1 {
 		multipleResourcesState = "failure"
 		for _, label := range pullRequest.Labels {
 			if label.Name == allowMultipleResourcesLabel {
@@ -382,8 +392,6 @@ func execGenerateComment(prNumber int, ghTokenMagicModules, buildId, buildStep, 
 		fmt.Printf("Error posting terraform-provider-multiple-resources build status for pr %d commit %s: %v\n", prNumber, commitSha, err)
 		errors["Other"] = append(errors["Other"], "Failed to update missing-service-labels status check with state: "+multipleResourcesState)
 	}
-	data.AddedResources = maps.Keys(uniqueAddedResources)
-	slices.Sort(data.AddedResources)
 
 	// Compute affected resources based on changed files
 	changedFilesAffectedResources := map[string]struct{}{}
@@ -633,6 +641,38 @@ func formatDiffComment(data diffCommentData) (string, error) {
 	return sb.String(), nil
 }
 
+// addedMultipleResources returns a sorted slice of resource names that are considered "separate" resources.
+// In particular, IAM resources are merged with the parent resource as part of this check.
+func multipleResources(resources []string) []string {
+	if len(resources) == 0 {
+		return nil
+	}
+	iam := map[string]struct{}{}
+	final := map[string]struct{}{}
+
+	for _, r := range resources {
+		if k, found := strings.CutSuffix(r, "_iam_member"); found {
+			iam[k] = struct{}{}
+		} else if k, found := strings.CutSuffix(r, "_iam_binding"); found {
+			iam[k] = struct{}{}
+		} else if k, found := strings.CutSuffix(r, "_iam_policy"); found {
+			iam[k] = struct{}{}
+		} else {
+			final[k] = struct{}{}
+		}
+	}
+
+	for r, _ := range iam {
+		if _, ok := final[r]; !ok {
+			final[r+"_iam_*"] = struct{}{}
+		}
+	}
+
+	ret := maps.Keys(final)
+	slices.Sort(ret)
+	return ret
+}
+
 var resourceFileRegexp = regexp.MustCompile(`^.*/services/[^/]+/(?:data_source_|resource_|iam_)(.*?)(?:_test|_sweeper|_iam_test|_generated_test|_internal_test)?.go`)
 var resourceDocsRegexp = regexp.MustCompile(`^.*website/docs/(?:r|d)/(.*).html.markdown`)
 
@@ -669,4 +709,49 @@ func pathChanged(path string, changedFiles []string) bool {
 
 func init() {
 	rootCmd.AddCommand(generateCommentCmd)
+}
+
+// checkDocumentFrontmatter checks changed markdown files' frontmatter
+// structure in the repo and returns error strings when applicable.
+func checkDocumentFrontmatter(repo source.Repo) []string {
+	var errs []string
+	for _, f := range repo.ChangedFiles {
+		if !strings.HasPrefix(f, "website/docs/r/") && !strings.HasPrefix(f, "website/docs/d/") {
+			continue
+		}
+		if !strings.HasSuffix(f, ".markdown") {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(repo.Path, f))
+		if err != nil {
+			errs = append(errs, "Error reading file "+f)
+			continue
+		}
+
+		md := goldmark.New(
+			goldmark.WithExtensions(&frontmatter.Extender{}),
+		)
+
+		ctx := parser.NewContext()
+		var buff bytes.Buffer
+
+		err = md.Convert(src, &buff, parser.WithContext(ctx))
+		if err != nil {
+			errs = append(errs, "Error parsing file "+f)
+			continue
+		}
+		data := frontmatter.Get(ctx)
+		if data == nil {
+			errs = append(errs, fmt.Sprintf("No frontmatter found in file %s. This is usually due to an incorrect structure in the frontmatter.", f))
+			continue
+		}
+
+		var metadata struct {
+			Subcategory string
+		}
+		if err := data.Decode(&metadata); err != nil {
+			errs = append(errs, fmt.Sprintf("Failed to decode frontmatter in file %s. This is usually due to an incorrect structure in the frontmatter.", f))
+		}
+	}
+	return errs
 }

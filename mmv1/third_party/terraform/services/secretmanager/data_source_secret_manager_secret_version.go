@@ -6,6 +6,7 @@ import (
 	"log"
 	"regexp"
 
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 
@@ -56,6 +57,11 @@ func DataSourceSecretManagerSecretVersion() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Default:  false,
+			},
+			"fetch_secret_data": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  true,
 			},
 		},
 	}
@@ -137,16 +143,32 @@ func dataSourceSecretManagerSecretVersionRead(d *schema.ResourceData, meta inter
 		return fmt.Errorf("error setting version: %s", err)
 	}
 
-	url = fmt.Sprintf("%s:access", url)
-	resp, err := transport_tpg.SendRequest(transport_tpg.SendRequestOptions{
-		Config:    config,
-		Method:    "GET",
-		Project:   project,
-		RawURL:    url,
-		UserAgent: userAgent,
-	})
-	if err != nil {
-		return fmt.Errorf("error retrieving available secret manager secret version access: %s", err.Error())
+	if d.Get("fetch_secret_data").(bool) {
+		url = fmt.Sprintf("%s:access", url)
+		resp, err := transport_tpg.SendRequest(transport_tpg.SendRequestOptions{
+			Config:    config,
+			Method:    "GET",
+			Project:   project,
+			RawURL:    url,
+			UserAgent: userAgent,
+		})
+		if err != nil {
+			return fmt.Errorf("error retrieving available secret manager secret version access: %s", err.Error())
+		}
+		data := resp["payload"].(map[string]interface{})
+		var secretData string
+		if d.Get("is_secret_data_base64").(bool) {
+			secretData = data["data"].(string)
+		} else {
+			payloadData, err := base64.StdEncoding.DecodeString(data["data"].(string))
+			if err != nil {
+				return fmt.Errorf("error decoding secret manager secret version data: %s", err.Error())
+			}
+			secretData = string(payloadData)
+		}
+		if err := d.Set("secret_data", secretData); err != nil {
+			return fmt.Errorf("error setting secret_data: %s", err)
+		}
 	}
 
 	if err := d.Set("create_time", version["createTime"].(string)); err != nil {
@@ -164,21 +186,15 @@ func dataSourceSecretManagerSecretVersionRead(d *schema.ResourceData, meta inter
 		return fmt.Errorf("error setting enabled: %s", err)
 	}
 
-	data := resp["payload"].(map[string]interface{})
-	var secretData string
-	if d.Get("is_secret_data_base64").(bool) {
-		secretData = data["data"].(string)
-	} else {
-		payloadData, err := base64.StdEncoding.DecodeString(data["data"].(string))
-		if err != nil {
-			return fmt.Errorf("error decoding secret manager secret version data: %s", err.Error())
-		}
-		secretData = string(payloadData)
-	}
-	if err := d.Set("secret_data", secretData); err != nil {
-		return fmt.Errorf("error setting secret_data: %s", err)
-	}
-
 	d.SetId(nameValue.(string))
 	return nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_secret_manager_secret_version",
+		ProductName: "secretmanager",
+		Type:        registry.SchemaTypeDataSource,
+		Schema:      DataSourceSecretManagerSecretVersion(),
+	}.Register()
 }

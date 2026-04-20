@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 )
@@ -55,5 +56,19 @@ func dataSourceAlloydbDatabaseClusterRead(d *schema.ResourceData, meta interface
 	if d.Id() == "" {
 		return fmt.Errorf("%s not found", id)
 	}
+
+	if err := d.Set("deletion_protection", nil); err != nil {
+		return fmt.Errorf("Error setting deletion_protection: %s", err)
+	}
+
 	return nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_alloydb_cluster",
+		ProductName: "alloydb",
+		Type:        registry.SchemaTypeDataSource,
+		Schema:      DataSourceAlloydbDatabaseCluster(),
+	}.Register()
 }

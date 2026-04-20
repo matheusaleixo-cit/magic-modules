@@ -48,18 +48,27 @@ examples:
     primary_resource_id: 'budget'
     vars:
       display_name: 'Example Billing Budget'
+    test_vars_overrides:
+      # for backward compatible
+      display_name: '"Example Billing Budget" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
   - name: 'billing_budget_lastperiod'
     primary_resource_id: 'budget'
     vars:
       display_name: 'Example Billing Budget'
+    test_vars_overrides:
+      # for backward compatible
+      display_name: '"Example Billing Budget" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
   - name: 'billing_budget_filter'
     primary_resource_id: 'budget'
     vars:
       display_name: 'Example Billing Budget'
+    test_vars_overrides:
+      # for backward compatible
+      display_name: '"Example Billing Budget" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
       org_id: 'ORG_ID'
@@ -68,18 +77,29 @@ examples:
     vars:
       budget_name: 'Example Billing Budget'
       channel_name: 'Example Notification Channel'
+    test_vars_overrides:
+      # for backward compatible
+      budget_name: '"Example Billing Budget" + randomSuffix'
+      # for backward compatible
+      channel_name: '"Example Notification Channel" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
   - name: 'billing_budget_notify_project_recipient'
     primary_resource_id: 'budget'
     vars:
       budget_name: 'Example Billing Budget'
+    test_vars_overrides:
+      # for backward compatible
+      budget_name: '"Example Billing Budget" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
   - name: 'billing_budget_customperiod'
     primary_resource_id: 'budget'
     vars:
       display_name: 'Example Billing Budget'
+    test_vars_overrides:
+      # for backward compatible
+      display_name: '"Example Billing Budget" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
   - name: 'billing_budget_optional'
@@ -87,6 +107,9 @@ examples:
     vars:
       display_name: 'Example Billing Budget'
       topic_name: 'example-topic'
+    test_vars_overrides:
+      # for backward compatible
+      display_name: '"Example Billing Budget" + randomSuffix'
     test_env_vars:
       billing_acct: 'MASTER_BILLING_ACCT'
     exclude_docs: true
@@ -213,9 +236,6 @@ properties:
           Optional. If creditTypesTreatment is INCLUDE_SPECIFIED_CREDITS,
           this is a list of credit types to be subtracted from gross cost to determine the spend for threshold calculations. See a list of acceptable credit type values.
           If creditTypesTreatment is not INCLUDE_SPECIFIED_CREDITS, this field must be empty.
-
-          **Note:** If the field has a value in the config and needs to be removed, the field has to be an empty array in the config.
-        default_from_api: true
         at_least_one_of:
           - 'budget_filter.0.projects'
           - 'budget_filter.0.resource_ancestors'
@@ -236,9 +256,6 @@ properties:
           the parent account, usage from the parent account will be included.
           If the field is omitted, the report will include usage from the parent
           account and all subaccounts, if they exist.
-
-          **Note:** If the field has a value in the config and needs to be removed, the field has to be an empty array in the config.
-        default_from_api: true
         at_least_one_of:
           - 'budget_filter.0.projects'
           - 'budget_filter.0.resource_ancestors'

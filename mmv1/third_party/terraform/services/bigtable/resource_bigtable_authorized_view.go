@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 )
@@ -355,9 +356,9 @@ func resourceBigtableAuthorizedViewDestroy(d *schema.ResourceData, meta interfac
 func resourceBigtableAuthorizedViewImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	config := meta.(*transport_tpg.Config)
 	if err := tpgresource.ParseImportId([]string{
-		"projects/(?P<project>[^/]+)/instances/(?P<instance_name>[^/]+)/tables/(?P<table_name>[^/]+)/authorizedViews/(?P<name>[^/]+)",
-		"(?P<project>[^/]+)/(?P<instance_name>[^/]+)/(?P<table_name>[^/]+)/(?P<name>[^/]+)",
-		"(?P<instance_name>[^/]+)/(?P<table_name>[^/]+)/(?P<name>[^/]+)",
+		"^projects/(?P<project>[^/]+)/instances/(?P<instance_name>[^/]+)/tables/(?P<table_name>[^/]+)/authorizedViews/(?P<name>[^/]+)$",
+		"^(?P<project>[^/]+)/(?P<instance_name>[^/]+)/(?P<table_name>[^/]+)/(?P<name>[^/]+)$",
+		"^(?P<instance_name>[^/]+)/(?P<table_name>[^/]+)/(?P<name>[^/]+)$",
 	}, d, config); err != nil {
 		return nil, err
 	}
@@ -460,4 +461,13 @@ func flattenSubsetViewInfo(subsetViewInfo *bigtable.SubsetViewInfo) []map[string
 	}
 
 	return subsetView
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_bigtable_authorized_view",
+		ProductName: "bigtable",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceBigtableAuthorizedView(),
+	}.Register()
 }

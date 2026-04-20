@@ -1,5 +1,5 @@
 /*
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2014, 2026
  * SPDX-License-Identifier: MPL-2.0
  */
 
@@ -61,6 +61,7 @@ class SweeperDetails(private val sweeperName: String, private val parentProjectN
         // These hardcoded values affect the sweeper CLI command's behaviour
         val testPrefix = "TestAcc"
         val testTimeout = "12"
+        val releaseDiffTest = false
 
         return BuildType {
 
@@ -97,7 +98,7 @@ class SweeperDetails(private val sweeperName: String, private val parentProjectN
 
             params {
                 configureGoogleSpecificTestParameters(environmentVariables)
-                acceptanceTestBuildParams(parallelism, testPrefix, testTimeout)
+                acceptanceTestBuildParams(parallelism, testPrefix, testTimeout, releaseDiffTest)
                 sweeperParameters(sweeperRegions, sweeperRun)
                 terraformLoggingParameters(environmentVariables, providerName)
                 terraformCoreBinaryTesting()

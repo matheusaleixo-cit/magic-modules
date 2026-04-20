@@ -38,6 +38,12 @@ resource "google_storage_bucket" "static-site" {
     response_header = ["*"]
     max_age_seconds = 3600
   }
+  cors {
+    origin            = ["http://image-store.com"]
+    method            = ["GET", "HEAD", "PUT", "POST", "DELETE"]
+    response_header   = ["*"]
+    max_age_seconds   = 0
+  }
 }
 ```
 
@@ -117,19 +123,72 @@ resource "google_storage_bucket" "hns-enabled" {
 }
 ```
 
+## Example Usage - IP filter mode enabled
+
+```hcl
+resource "google_storage_bucket" "hns-enabled" {
+  name          = "hns-enabled-bucket"
+  location      = "US"
+  force_destroy = true
+
+  ip_filter  {
+    mode = "Enabled"
+    public_network_source {
+      allowed_ip_cidr_ranges = ["0.0.0.0/0", "::/0"]
+    }
+  }
+}
+```
+
+## Example Usage - IP filter mode disabled
+
+```hcl
+resource "google_storage_bucket" "hns-enabled" {
+  name          = "hns-enabled-bucket"
+  location      = "US"
+  force_destroy = true
+
+  ip_filter  {
+    mode = "Disabled"
+    public_network_source {
+      allowed_ip_cidr_ranges = ["0.0.0.0/0", "::/0"]
+    }
+  }
+}
+```
+## Example Usage - Enabling encryption enforcement config
+
+```hcl
+resource "google_storage_bucket" "hns-enabled" {
+  name          = "hns-enabled-bucket"
+  location      = "US"
+  force_destroy = true
+
+  encryption  {
+    google_managed_encryption_enforcement_config {
+      restriction_mode = "FullyRestricted"
+    }
+    customer_managed_encryption_enforcement_config {
+      restriction_mode = "FullyRestricted"
+    }
+    customer_supplied_encryption_enforcement_config {
+      restriction_mode = "NotRestricted"
+    }
+  }
+}
+```
+
 ## Argument Reference
 
 The following arguments are supported:
 
-* `name` - (Required) The name of the bucket.
+* `name` - (Required) The name of the bucket. Bucket names must be in lowercase and no more than 63 characters long. You can find the complete list of bucket naming rules [here](https://cloud.google.com/storage/docs/buckets#naming).
 
 * `location` - (Required) The [GCS location](https://cloud.google.com/storage/docs/bucket-locations).
 
 - - -
 
-* `force_destroy` - (Optional, Default: false) When deleting a bucket, this
-    boolean option will delete all contained objects. If you try to delete a
-    bucket that contains objects, Terraform will fail that run.
+* `force_destroy` - (Optional, Default: false) When true, before deleting a bucket, delete all objects within the bucket, or Anywhere Caches caching data for that bucket. Otherwise, buckets with objects/caches will fail. Anywhere Cache requires additional permissions to interact with and will be assumed not present when Terraform is not permissioned, attempting to delete the bucket anyways. This may result in the objects in the bucket getting destroyed but not the bucket itself if there is a cache in use with the bucket. Force deletion may take a long time to delete buckets with lots of objects or with any Anywhere Caches (80m+).
 
 * `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
@@ -255,7 +314,7 @@ The following arguments are supported:
 
 * `is_locked` - (Optional) If set to `true`, the bucket will be [locked](https://cloud.google.com/storage/docs/using-bucket-lock#lock-bucket) and permanently restrict edits to the bucket's retention policy.  Caution: Locking a bucket is an irreversible action.
 
-* `retention_period` - (Required) The period of time, in seconds, that objects in the bucket must be retained and cannot be deleted, overwritten, or archived. The value must be less than 2,147,483,647 seconds.
+* `retention_period` - (Required) The period of time, in seconds, that objects in the bucket must be retained and cannot be deleted, overwritten, or archived. The value must be less than 3,155,760,000 seconds.
 
 <a name="nested_logging"></a>The `logging` block supports:
 
@@ -266,7 +325,7 @@ The following arguments are supported:
 
 <a name="nested_encryption"></a>The `encryption` block supports:
 
-* `default_kms_key_name`: The `id` of a Cloud KMS key that will be used to encrypt objects inserted into this bucket, if no encryption method is specified.
+* `default_kms_key_name` -  (Optional) The `id` of a Cloud KMS key that will be used to encrypt objects inserted into this bucket, if no encryption method is specified.
   You must pay attention to whether the crypto key is available in the location that this bucket is created in.
   See [the docs](https://cloud.google.com/storage/docs/encryption/using-customer-managed-keys) for more details.
 
@@ -280,6 +339,17 @@ The following arguments are supported:
   This data source calls an API which creates the account if required, ensuring your Terraform applies cleanly and repeatedly irrespective of the
   state of the project.
   You should take care for race conditions when the same Terraform manages IAM policy on the Cloud KMS crypto key. See the data source page for more details.
+
+* `google_managed_encryption_enforcement_config`: (Optional) If omitted, then new objects with GMEK encryption-type is allowed. If set, then new objects created in this bucket must comply with enforcement config. Changing this has no effect on existing objects; it applies to new objects only, Structure is documented below [documented below](#nested_google_managed_encryption_enforcement_config).
+
+* `customer_managed_encryption_enforcement_config`: (Optional) If omitted, then new objects with CMEK encryption-type is allowed. If set, then new objects created in this bucket must comply with enforcement config. Changing this has no effect on existing objects; it applies to new objects only, Structure is documented below [documented below](#nested_customer_managed_encryption_enforcement_config).
+
+* `customer_supplied_encryption_enforcement_config`: (Optional) If omitted, then new objects with CSEK encryption-type is allowed. If set, then new objects created in this bucket must comply with enforcement config. Changing this has no effect on existing objects; it applies to new objects only, Structure is documented below [documented below](#nested_customer_supplied_encryption_enforcement_config).
+* `google_managed_encryption_enforcement_config` - (Optional) If omitted, then new objects with GMEK encryption-type is allowed. If set, then new objects created in this bucket must comply with enforcement config. Changing this has no effect on existing objects; it applies to new objects only, Structure is documented below [documented below](#nested_google_managed_encryption_enforcement_config).
+
+* `customer_managed_encryption_enforcement_config` - (Optional) If omitted, then new objects with CMEK encryption-type is allowed. If set, then new objects created in this bucket must comply with enforcement config. Changing this has no effect on existing objects; it applies to new objects only, Structure is documented below [documented below](#nested_customer_managed_encryption_enforcement_config).
+
+* `customer_supplied_encryption_enforcement_config` - (Optional) If omitted, then new objects with CSEK encryption-type is allowed. If set, then new objects created in this bucket must comply with enforcement config. Changing this has no effect on existing objects; it applies to new objects only, Structure is documented below [documented below](#nested_customer_supplied_encryption_enforcement_config).
 
 <a name="nested_custom_placement_config"></a>The `custom_placement_config` block supports:
 
@@ -299,6 +369,14 @@ The following arguments are supported:
 
 * `mode` - (Required) The state of the IP filter configuration. Valid values are `Enabled` and `Disabled`. When set to `Enabled`, IP filtering rules are applied to a bucket and all incoming requests to the bucket are evaluated against these rules. When set to `Disabled`, IP filtering rules are not applied to a bucket.
 
+**Note**: Once ip_filter is setup, it can either be `Enabled` or `Disabled` and cannot be removed from config.
+
+**Note**: `allow_all_service_agent_access` must be supplied when `mode` is set to `Enabled`, it can be ommited for other values.
+
+* `allow_cross_org_vpcs` - (Optional) While set `true`, allows cross-org VPCs in the bucket's IP filter configuration.
+
+* `allow_all_service_agent_access` (Optional) While set `true`, allows all service agents to access the bucket regardless of the IP filter configuration.
+
 * `public_network_source` - (Optional) The public network IP address ranges that can access the bucket and its data. Structure is [documented below](#nested_public_network_source).
 
 * `vpc_network_sources` - (Optional) The list of VPC networks that can access the bucket. Structure is [documented below](#nested_vpc_network_sources).
@@ -312,6 +390,24 @@ The following arguments are supported:
 * `network` - Name of the network. Format: `projects/PROJECT_ID/global/networks/NETWORK_NAME`
 
 * `allowed_ip_cidr_ranges` - The list of public or private IPv4 and IPv6 CIDR ranges that can access the bucket.
+
+<a name="nested_google_managed_encryption_enforcement_config"></a>The `google_managed_encryption_enforcement_config` block supports:
+
+* `restriction_mode` - (Required) Whether Google Managed Encryption (GMEK) is restricted for new objects within the bucket. If FullyRestricted, new objects can't be created using GMEK encryption. If NotRestricted or unset, creation of new objects with GMEK encryption is allowed.
+
+* `effective_time` - Time from which the config was effective.
+
+<a name="nested_customer_supplied_encryption_enforcement_config"></a>The `customer_supplied_encryption_enforcement_config` block supports:
+
+* `restriction_mode` - (Required) Whether Customer Supplied Encryption (CSEK) is restricted for new objects within the bucket. If FullyRestricted, new objects can't be created using CSEK encryption. If NotRestricted or unset, creation of new objects with CSEK encryption is allowed.
+
+* `effective_time` - Time from which the config was effective.
+
+<a name="nested_customer_managed_encryption_enforcement_config"></a>The `customer_managed_encryption_enforcement_config` block supports:
+
+* `restriction_mode` - (Required) Whether Customer Managed Encryption (CMEK) is restricted for new objects within the bucket. If FullyRestricted, new objects can't be created using CMEK encryption. If NotRestricted or unset, creation of new objects with CMEK encryption is allowed.
+
+* `effective_time` - Time from which the config was effective.
 
 ## Attributes Reference
 

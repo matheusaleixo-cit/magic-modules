@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	tpgcompute "github.com/hashicorp/terraform-provider-google/google/services/compute"
 	tpgserviceusage "github.com/hashicorp/terraform-provider-google/google/services/serviceusage"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
@@ -774,7 +775,7 @@ func doEnableServicesRequest(services []string, project, billingProject, userAge
 // Handle errors that are retryable at call time for serviceusage
 // Specifically, errors in https://cloud.google.com/service-usage/docs/reference/rest/v1/services/batchEnable#response-body
 // Errors in operations are handled separately.
-// NOTE(rileykarson): This should probably be turned into a retry predicate
+// TODO: This should probably be turned into a retry predicate
 func handleServiceUsageRetryablePreconditionError(err error) error {
 	if err == nil {
 		return nil
@@ -810,16 +811,13 @@ func ListCurrentlyEnabledServices(project, billingProject, userAgent string, con
 						// services are returned as "projects/{{project}}/services/{{name}}"
 						name := tpgresource.GetResourceNameFromSelfLink(v.Name)
 
-						// if name not in ignoredProjectServicesSet
-						if _, ok := ignoredProjectServicesSet[name]; !ok {
-							apiServices[name] = struct{}{}
+						apiServices[name] = struct{}{}
 
-							// if a service has been renamed, set both. We'll deal
-							// with setting the right values later.
-							if v, ok := renamedServicesByOldAndNewServiceNames[name]; ok {
-								log.Printf("[DEBUG] Adding service alias for %s to enabled services: %s", name, v)
-								apiServices[v] = struct{}{}
-							}
+						// if a service has been renamed, set both. We'll deal
+						// with setting the right values later.
+						if v, ok := renamedServicesByOldAndNewServiceNames[name]; ok {
+							log.Printf("[DEBUG] Adding service alias for %s to enabled services: %s", name, v)
+							apiServices[v] = struct{}{}
 						}
 					}
 					return nil
@@ -874,4 +872,13 @@ func waitForServiceUsageEnabledServices(services []string, project, billingProje
 		return errwrap.Wrap(err, fmt.Errorf("failed to enable some service(s) %q for project %s", missing, project))
 	}
 	return nil
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_project",
+		ProductName: "resourcemanager",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceGoogleProject(),
+	}.Register()
 }

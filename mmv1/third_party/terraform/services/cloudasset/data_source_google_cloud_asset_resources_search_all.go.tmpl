@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 )
@@ -97,7 +98,14 @@ func datasourceGoogleCloudAssetResourcesSearchAllRead(d *schema.ResourceData, me
 	query := d.Get("query").(string)
 	assetTypes := d.Get("asset_types").([]interface{})
 
-	url := fmt.Sprintf("https://cloudasset.googleapis.com/v1p1beta1/%s/resources:searchAll", scope)
+	universeDomain := config.UniverseDomain
+	url := ""
+	if universeDomain != "" && universeDomain != "googleapis.com" {
+		url = fmt.Sprintf("https://cloudasset.%s/v1p1beta1/%s/resources:searchAll", universeDomain, scope)
+	} else {
+		url = fmt.Sprintf("https://cloudasset.googleapis.com/v1p1beta1/%s/resources:searchAll", scope)
+	}
+	
 	params["query"] = query
 
 	url, err = transport_tpg.AddArrayQueryParams(url, "asset_types", assetTypes)
@@ -207,6 +215,15 @@ func vflattenDatasourceGoogleCloudAssetResourcesSearchAllList(v interface{}) []m
 	}
 
 	return results
+}
+
+func init() {
+	registry.Schema{
+		Name: "google_cloud_asset_resources_search_all",
+		ProductName: "cloudasset",
+		Type: registry.SchemaTypeDataSource,
+		Schema: DataSourceGoogleCloudAssetResourcesSearchAll(),
+	}.Register()
 }
 
 {{ end }}

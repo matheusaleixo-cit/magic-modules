@@ -19,16 +19,17 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-var ORDER = []string{"ga", "beta", "alpha", "private"}
+var ORDER = []string{"ga", "beta", "nightly", "alpha", "private", "internal"}
 
 // A version of the API for a given product / API group
 // In GCP, different product versions are generally ordered where alpha is
 // a superset of beta, and beta a superset of GA. Each version will have a
 // different version url.
 type Version struct {
-	CaiBaseUrl string `yaml:"cai_base_url,omitempty"`
-	BaseUrl    string `yaml:"base_url"`
-	Name       string
+	CaiBaseUrl       string `yaml:"cai_base_url,omitempty"`
+	CaiLegacyBaseUrl string `yaml:"cai_legacy_base_url,omitempty"`
+	BaseUrl          string `yaml:"base_url"`
+	Name             string
 }
 
 func (v *Version) Validate(pName string) {

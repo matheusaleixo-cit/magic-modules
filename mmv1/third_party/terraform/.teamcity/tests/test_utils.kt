@@ -1,5 +1,5 @@
 /*
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2014, 2026
  * SPDX-License-Identifier: MPL-2.0
  */
 
@@ -15,6 +15,7 @@ import org.junit.Assert.fail
 const val gaProjectName = "Google"
 const val betaProjectName = "Google Beta"
 const val nightlyTestsProjectName = "Nightly Tests"
+const val weeklyDiffTestsProjectName = "Weekly Diff Tests"
 const val mmUpstreamProjectName = "Upstream MM Testing"
 const val projectSweeperProjectName = "Project Sweeper"
 

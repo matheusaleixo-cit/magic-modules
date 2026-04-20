@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -245,7 +246,7 @@ func TestFormatDiffComment(t *testing.T) {
 		},
 		"multiple resources are displayed": {
 			data: diffCommentData{
-				AddedResources: []string{"google_redis_instance", "google_alloydb_cluster"},
+				MultipleResources: []string{"google_redis_instance", "google_alloydb_cluster"},
 			},
 			expectedStrings: []string{
 				"## Diff report",
@@ -347,6 +348,72 @@ func TestFormatDiffComment(t *testing.T) {
 			for _, s := range tc.notExpectedStrings {
 				assert.NotContains(t, comment, s)
 			}
+		})
+	}
+}
+
+func TestMultipleResources(t *testing.T) {
+	cases := []struct {
+		name      string
+		resources []string
+		want      []string
+	}{
+		{
+			name: "no resources",
+		},
+		{
+			name:      "single non-iam",
+			resources: []string{"google_redis_instance"},
+			want:      []string{"google_redis_instance"},
+		},
+		{
+			name:      "multiple non-iam",
+			resources: []string{"google_redis_instance", "google_alloydb_cluster"},
+			want:      []string{"google_alloydb_cluster", "google_redis_instance"},
+		},
+		{
+			name:      "single iam only",
+			resources: []string{"google_redis_instance_iam_member", "google_redis_instance_iam_policy", "google_redis_instance_iam_binding"},
+			want:      []string{"google_redis_instance_iam_*"},
+		},
+		{
+			name:      "single iam with parent",
+			resources: []string{"google_redis_instance_iam_member", "google_redis_instance_iam_policy", "google_redis_instance_iam_binding", "google_redis_instance"},
+			want:      []string{"google_redis_instance"},
+		},
+		{
+			name: "multiple iam",
+			resources: []string{
+				"google_redis_instance_iam_member",
+				"google_redis_instance_iam_policy",
+				"google_redis_instance_iam_binding",
+				"google_alloydb_cluster_iam_member",
+				"google_alloydb_cluster_iam_policy",
+				"google_alloydb_cluster_iam_binding",
+			},
+			want: []string{"google_alloydb_cluster_iam_*", "google_redis_instance_iam_*"},
+		},
+		{
+			name: "multiple iam with parent",
+			resources: []string{
+				"google_redis_instance_iam_member",
+				"google_redis_instance_iam_policy",
+				"google_redis_instance_iam_binding",
+				"google_alloydb_cluster_iam_member",
+				"google_alloydb_cluster_iam_policy",
+				"google_alloydb_cluster_iam_binding",
+				"google_redis_instance",
+			},
+			want: []string{"google_alloydb_cluster_iam_*", "google_redis_instance"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := multipleResources(tc.resources)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
@@ -547,6 +614,91 @@ func TestPathChanged(t *testing.T) {
 
 			got := pathChanged(tc.path, tc.changedFiles)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestCheckDocumentFrontmatter(t *testing.T) {
+	tmpDir := t.TempDir()
+	files := map[string]string{
+		"malformed.markdown": `
+subcategory: Example Subcategory
+---	
+`,
+		"sample.markdown": `
+---
+subcategory: Example Subcategory
+---	
+`,
+		"missingsubcategory.markdown": `
+---
+random: Example Subcategory
+---	
+`,
+	}
+
+	folderPath := filepath.Join(tmpDir, "website", "docs", "r")
+	if err := os.MkdirAll(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		fullPath := filepath.Join(folderPath, name)
+		err := os.WriteFile(fullPath, []byte(content), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create file %s: %v", name, err)
+		}
+	}
+
+	// write a file in other folders
+	if err := os.WriteFile(filepath.Join(tmpDir, "abc.md"), []byte("random"), 0644); err != nil {
+		t.Fatalf("Failed to create file %s: %v", filepath.Join(tmpDir, "abc.md"), err)
+	}
+
+	tests := []struct {
+		name         string
+		changedFiles []string
+		wantErr      bool
+	}{
+		{
+			name:         "not in relevant doc folder",
+			changedFiles: []string{"abc.md"},
+			wantErr:      false,
+		},
+		{
+			name:         "not markdown files",
+			changedFiles: []string{"website/docs/r/abc.txt"},
+			wantErr:      false,
+		},
+		{
+			name:         "malformed markdown",
+			changedFiles: []string{"website/docs/r/malformed.markdown"},
+			wantErr:      true,
+		},
+		{
+			name:         "markdown not exist",
+			changedFiles: []string{"website/docs/d/sample.markdown"},
+			wantErr:      true,
+		},
+		{
+			name:         "correct format",
+			changedFiles: []string{"website/docs/r/sample.markdown"},
+			wantErr:      false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := source.Repo{
+				Path:         tmpDir,
+				ChangedFiles: tc.changedFiles,
+			}
+			got := checkDocumentFrontmatter(repo)
+			if tc.wantErr && len(got) == 0 {
+				t.Errorf("checkDocumentFrontmatter() = %v, want error", got)
+			}
+			if !tc.wantErr && len(got) > 0 {
+				t.Errorf("checkDocumentFrontmatter() = %v, want no error", got)
+			}
 		})
 	}
 }

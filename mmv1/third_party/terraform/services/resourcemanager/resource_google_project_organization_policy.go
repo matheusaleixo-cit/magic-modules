@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-provider-google/google/registry"
 	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	transport_tpg "github.com/hashicorp/terraform-provider-google/google/transport"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -47,9 +48,9 @@ func resourceProjectOrgPolicyImporter(d *schema.ResourceData, meta interface{}) 
 	config := meta.(*transport_tpg.Config)
 
 	if err := tpgresource.ParseImportId([]string{
-		"projects/(?P<project>[^/]+):constraints/(?P<constraint>[^/]+)",
-		"(?P<project>[^/]+):constraints/(?P<constraint>[^/]+)",
-		"(?P<project>[^/]+):(?P<constraint>[^/]+)"},
+		"^projects/(?P<project>[^/]+):constraints/(?P<constraint>[^/]+)$",
+		"^(?P<project>[^/]+):constraints/(?P<constraint>[^/]+)$",
+		"^(?P<project>[^/]+):(?P<constraint>[^/]+)$"},
 		d, config); err != nil {
 		return nil, err
 	}
@@ -189,4 +190,13 @@ func setProjectOrganizationPolicy(d *schema.ResourceData, meta interface{}) erro
 		},
 		Timeout: d.Timeout(schema.TimeoutCreate),
 	})
+}
+
+func init() {
+	registry.Schema{
+		Name:        "google_project_organization_policy",
+		ProductName: "resourcemanager",
+		Type:        registry.SchemaTypeResource,
+		Schema:      ResourceGoogleProjectOrganizationPolicy(),
+	}.Register()
 }
