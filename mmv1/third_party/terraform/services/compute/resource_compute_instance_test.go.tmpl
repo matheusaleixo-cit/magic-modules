@@ -5233,6 +5233,8 @@ func TestAccComputeInstance_ServiceClassNetworkAttachment(t *testing.T) {
 		"suffix":                  (acctest.RandString(t, 10)),
 		"network_attachment_name": testNetworkAttachmentName,
 		"region":                  envRegion,
+    "org_id":                  envvar.GetTestOrgTargetFromEnv(t),
+		"billing_account":         envvar.GetTestBillingAccountFromEnv(t),
 	}
 
 	acctest.VcrTest(t, resource.TestCase{
@@ -12693,7 +12695,7 @@ resource "google_compute_instance" "foobar" {
 
 	network_interface {
 		network_attachment = google_compute_network_attachment.test_network_attachment.self_link
-		service_class_id = "PLACEHOLDER"		# ToDo: ServiceClass is not yet implemented
+		# service_class_id = "PLACEHOLDER"		# ToDo: ServiceClass is not yet implemented
 	}
 
 	metadata = {
@@ -12702,8 +12704,8 @@ resource "google_compute_instance" "foobar" {
 }
 
 resource "google_project" "accepted_producer_project1" {
-    project_id      = "tf-test-prj-accept1-%{random_suffix}"
-    name            = "tf-test-prj-accept1-%{random_suffix}"
+    project_id      = "tf-test-prj-accept1-%{suffix}"
+    name            = "tf-test-prj-accept1-%{suffix}"
     org_id          = "%{org_id}"
     billing_account = "%{billing_account}"
     deletion_policy = "DELETE"

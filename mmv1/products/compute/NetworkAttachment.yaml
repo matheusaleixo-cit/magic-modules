@@ -225,8 +225,8 @@ properties:
           description: An array of CIDR ranges reserved for the producer instance network interface.
           output: true
           item_type:
-            type: string
+            type: String
         - name: 'isReserved'
-          type: String
+          type: Boolean
           description: ToDo DESCRIPTION.
-          output: Boolean
+          output: true
