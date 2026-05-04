@@ -203,7 +203,7 @@ resource "google_project" "accepted_producer_project2" {
 `, context)
 }
 
-func TestAccComputeNetworkAttachment_stableIp(t *testing.T) {
+func TestAccComputeNetworkAttachment_stableIpProjectIdAuth(t *testing.T) {
 	t.Parallel()
 
 	context := map[string]interface{}{
@@ -215,10 +215,11 @@ func TestAccComputeNetworkAttachment_stableIp(t *testing.T) {
 	acctest.VcrTest(t, resource.TestCase{
 		PreCheck:                 func() { acctest.AccTestPreCheck(t) },
 		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories(t),
+		ExternalProviders:        map[string]resource.ExternalProvider{"time": {}},
 		CheckDestroy:             testAccCheckComputeNetworkAttachmentDestroyProducer(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccComputeNetworkAttachment_stableIp(context),
+				Config: testAccComputeNetworkAttachment_stableIpProjectIdAuth(context),
 			},
 			{
 				ResourceName:            "google_compute_network_attachment.default",
@@ -230,42 +231,54 @@ func TestAccComputeNetworkAttachment_stableIp(t *testing.T) {
 	})
 }
 
-func testAccComputeNetworkAttachment_stableIp(context map[string]interface{}) string {
+func testAccComputeNetworkAttachment_stableIpProjectIdAuth(context map[string]interface{}) string {
 	return acctest.Nprintf(`
-resource "google_compute_network_attachment" "default" {
-    name = "tf-test-basic-network-attachment%{random_suffix}"
-    region = "us-central1"
-    description = "basic network attachment description"
-    connection_preference = "ACCEPT_MANUAL"
+resource "google_project" "accepted_producer_project1" {
+  project_id      = "tf-test-prj-accept1-%{random_suffix}"
+  name            = "tf-test-prj-accept1-%{random_suffix}"
+  org_id          = "%{org_id}"
+  billing_account = "%{billing_account}"
+  deletion_policy = "DELETE"
+}
 
-    subnetworks = [
-        google_compute_subnetwork.net1.self_link
-    ]
+resource "google_project_service" "compute_service" {
+  project = google_project.accepted_producer_project1.project_id
+  service = "compute.googleapis.com"
+}
 
-    producer_accept_lists = [
-        google_project.accepted_producer_project1.project_id
-    ]
+resource "time_sleep" "wait_300_seconds" {
+  create_duration = "300s"
+  depends_on = [google_project_service.compute_service]
 }
 
 resource "google_compute_network" "default" {
-    name = "tf-test-basic-network%{random_suffix}"
-    auto_create_subnetworks = false
+  name = "tf-test-basic-network%{random_suffix}"
+  auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "net1" {
-    name = "tf-test-basic-subnetwork1-%{random_suffix}"
-    region = "us-central1"
+  name = "tf-test-basic-subnetwork1-%{random_suffix}"
+  region = "us-central1"
 
-    network = google_compute_network.default.id
-    ip_cidr_range = "10.0.0.0/16"
+  network = google_compute_network.default.id
+  ip_cidr_range = "10.0.0.0/16"
 }
 
-resource "google_project" "accepted_producer_project1" {
-    project_id      = "tf-test-prj-accept1-%{random_suffix}"
-    name            = "tf-test-prj-accept1-%{random_suffix}"
-    org_id          = "%{org_id}"
-    billing_account = "%{billing_account}"
-    deletion_policy = "DELETE"
+resource "google_compute_network_attachment" "default" {
+  name = "tf-test-basic-network-attachment%{random_suffix}"
+  region = "us-central1"
+  description = "basic network attachment description"
+  connection_preference = "ACCEPT_MANUAL"
+
+  subnetworks = [
+    google_compute_subnetwork.net1.self_link
+  ]
+
+  producer_accept_lists = [
+    google_project.accepted_producer_project1.project_id
+  ]
+
+	depends_on = [time_sleep.wait_300_seconds]
 }
 
 resource "google_compute_address" "producer_address" {
@@ -288,13 +301,13 @@ resource "google_compute_instance" "producer_instance" {
   }
 
   network_interface {
-    network = google_compute_network.default
-    subnetwork = google_compute_subnetwork.net1
+    network = google_compute_network.default.id
+    subnetwork = google_compute_subnetwork.net1.id
   }
 
   network_interface {
     network_attachment = google_compute_network_attachment.default.self_link
-    private_network_ip = google_compute_address.producer_address.id
+		network_ip = google_compute_address.producer_address.self_link
   }
   
   metadata = {
