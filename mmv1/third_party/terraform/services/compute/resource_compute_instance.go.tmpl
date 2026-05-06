@@ -638,7 +638,6 @@ func ResourceComputeInstance() *schema.Resource {
 						"enable_vpc_scoped_dns": {
 							Type:        schema.TypeBool,
 							Optional:    true,
-							Computed:    true,
 							ForceNew:    true,
 							Description: `Optional. If true, DNS resolution will be enabled over this interface. Only valid with networkAttachment.`,
 						},
