@@ -643,14 +643,6 @@ func ResourceComputeInstance() *schema.Resource {
 It is not possible to use on its own; however, network_attachment can be used without service_class_id.`,
 						},
 
-            "enable_vpc_scoped_dns": {
-							Type:         schema.TypeBool,
-							Optional:     true,
-							Computed:     true,
-              ForceNew:     true,
-							Description:  `Optional. If true, DNS resolution will be enabled over this interface. Only valid with networkAttachment.`,
-						},
-
 						"parent_nic_name": {
 							Type:        schema.TypeString,
 							Computed:    true,
