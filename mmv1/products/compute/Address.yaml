@@ -272,3 +272,9 @@ properties:
       ToDo: Review this description
       Producer Service's Service class Id for the region of this network interface. Can only be used with network_attachment.
       It is not possible to use on its own; however, network_attachment can be used without service_class_id.
+  - name: 'addressId'
+    type: String
+    api_name: 'id'
+    description: |
+      The unique numeric identifier for the resource. This identifier is defined by the server.
+    output: true
