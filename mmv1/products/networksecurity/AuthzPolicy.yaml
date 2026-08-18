@@ -113,7 +113,7 @@ samples:
           to_operations_snis_exact: google.com
         test_env_vars:
           project: PROJECT_NAME
-      - name: network_security_authz_policy_with_network_rules_update
+      - name: network_security_authz_policy_with_network_rules_update1
         resource_id_vars:
           network_name: lb-network
           subnet_name: backend-subnet
@@ -128,18 +128,10 @@ samples:
           sources_prefix: 10.4.0.0
           sources_principal: spiffe://example.com/ns/prod/sa/app-updated
           sources_principal_ignore_case: true
-          to_operations_snis_prefix: google.com
-          to_operations_snis_suffix: null
-          to_operations_snis_contains: null
-          to_operations_snis_ignore_case: true
-          to_not_operations_snis_prefix: google.com
-          to_not_operations_snis_suffix: null
-          to_not_operations_snis_contains: null
-          to_not_operations_snis_ignore_case: true
           network_rules_when: request.host.endsWith('.example.com')
         test_env_vars:
           project: PROJECT_NAME
-      - name: network_security_authz_policy_with_network_rules_update
+      - name: network_security_authz_policy_with_network_rules_update2
         resource_id_vars:
           network_name: lb-network
           subnet_name: backend-subnet
@@ -154,18 +146,10 @@ samples:
           sources_prefix: 10.5.0.0
           sources_principal: spiffe://example.com/ns/prod/sa/app-updated
           sources_principal_ignore_case: true
-          to_operations_snis_prefix: null
-          to_operations_snis_suffix: /samples
-          to_operations_snis_contains: null
-          to_operations_snis_ignore_case: true
-          to_not_operations_snis_prefix: null
-          to_not_operations_snis_suffix: /samples
-          to_not_operations_snis_contains: null
-          to_not_operations_snis_ignore_case: true
           network_rules_when: request.host.endsWith('.example.com')
         test_env_vars:
           project: PROJECT_NAME
-      - name: network_security_authz_policy_with_network_rules_update
+      - name: network_security_authz_policy_with_network_rules_update3
         resource_id_vars:
           network_name: lb-network
           subnet_name: backend-subnet
@@ -180,14 +164,6 @@ samples:
           sources_prefix: 10.6.0.0
           sources_principal: spiffe://example.com/ns/prod/sa/app-updated
           sources_principal_ignore_case: true
-          to_operations_snis_prefix: null
-          to_operations_snis_suffix: null
-          to_operations_snis_contains: /beta/
-          to_operations_snis_ignore_case: true
-          to_not_operations_snis_prefix: null
-          to_not_operations_snis_suffix: null
-          to_not_operations_snis_contains: /v1/
-          to_not_operations_snis_ignore_case: true
           network_rules_when: request.host.endsWith('.example.com')
         test_env_vars:
           project: PROJECT_NAME

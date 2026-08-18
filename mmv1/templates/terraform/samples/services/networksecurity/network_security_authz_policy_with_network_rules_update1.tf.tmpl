@@ -115,18 +115,14 @@ resource "google_network_security_authz_policy" "{{$.PrimaryResourceId}}" {
     to {
       operations {
         snis {
-          ignore_case = {{index $.Vars "to_operations_snis_ignore_case"}}
-          prefix = "{{index $.Vars "to_operations_snis_prefix"}}"
-          suffix = "{{index $.Vars "to_operations_snis_suffix"}}"
-          contains = "{{index $.Vars "to_operations_snis_contains"}}"
+          ignore_case = true
+          prefix = "google.com"
         }
       }
       not_operations {
         snis {
-          ignore_case = {{index $.Vars "to_not_operations_snis_ignore_case"}}
-          prefix = "{{index $.Vars "to_not_operations_snis_prefix"}}"
-          suffix = "{{index $.Vars "to_not_operations_snis_suffix"}}"
-          contains = "{{index $.Vars "to_not_operations_snis_contains"}}"
+          ignore_case = true
+          prefix = "google.com"
         }
       }
     }
